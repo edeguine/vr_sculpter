@@ -58,6 +58,12 @@ public class GrabAndRotate : MonoBehaviour
     private bool sgStarted = false;
     private bool sgStopped = false;
 
+    private bool isAddMode = false;
+
+    private bool brushIsSmallCube = true;
+    private string pointePath = @"C:\Users\edegu\vr_sculpter\Assets\tools\pointe.txt";
+    private string smallCubePath = @"C:\Users\edegu\sculptures\small_cube_2023_07_22_12_22_17.txt";
+
     void Start()
     {
         if(!sgStarted) {
@@ -75,7 +81,8 @@ public class GrabAndRotate : MonoBehaviour
             sgStarted = true;
         }
 
-        LoadBrush(@"C:\Users\edegu\vr_sculpter\Assets\tools\pointe.txt");
+        LoadBrush(pointePath);
+        brushIsSmallCube = true;
     }
         
 
@@ -192,6 +199,27 @@ public class GrabAndRotate : MonoBehaviour
                 }
             } else {
                 Debug.Log("subResGroup is null");
+            }
+            return res;
+    }
+
+    IntPtr boolean_add(IntPtr firstSelected, IntPtr secondSelected) {
+        IntPtr res = IntPtr.Zero;
+        IntPtr unionResGroup = SolidGeometryLibIntegration.sg_bool_union(firstSelected, secondSelected);
+
+            if (unionResGroup != IntPtr.Zero)
+            {
+                if (SolidGeometryLibIntegration.sg_object_type(unionResGroup) == 10)   //  10 - type of group
+                {
+                    int chCnt = SolidGeometryLibIntegration.sg_group_child_count(unionResGroup);
+                    for (int i = 0; i < chCnt && i < 1; i++)
+                    {
+                        IntPtr curCh = SolidGeometryLibIntegration.sg_group_child(unionResGroup, i);
+                        res = curCh;
+                    }
+                    SolidGeometryLibIntegration.sg_group_break(unionResGroup);
+                    intPtrs.Add(unionResGroup);
+                }
             }
             return res;
     }
@@ -721,13 +749,24 @@ public class GrabAndRotate : MonoBehaviour
 
             Debug.Log("Doing first sculpture");
             if(brushIntPtr != IntPtr.Zero) {
-                sculptedIntPtr = boolean_sub(sculptureEmpty.GetComponent<sgObject>().GetHandle(), brushIntPtr);
+                if(isAddMode) {
+                    sculptedIntPtr = boolean_add(sculptureEmpty.GetComponent<sgObject>().GetHandle(), brushIntPtr);
+                } else {
+                    sculptedIntPtr = boolean_sub(sculptureEmpty.GetComponent<sgObject>().GetHandle(), brushIntPtr);
+                }
+                
             } else {
-                sculptedIntPtr = boolean_sub(sculptureEmpty.GetComponent<sgObject>().GetHandle(), brushEmpty.GetComponent<sgObject>().GetHandle());
+                if(isAddMode) {
+                    sculptedIntPtr = boolean_add(sculptureEmpty.GetComponent<sgObject>().GetHandle(), brushEmpty.GetComponent<sgObject>().GetHandle());
+                } else {
+                    sculptedIntPtr = boolean_sub(sculptureEmpty.GetComponent<sgObject>().GetHandle(), brushEmpty.GetComponent<sgObject>().GetHandle());
+                }
+                
             }
         } else {
             leftTrees.Add(currentLeft);
-            leftIntPtrs.Add(leftGrabbedObject.GetComponent<sgObject>().GetHandle());
+            leftIntPtrs.Add(currentLeftIntPtr);
+           
 
             if(obrush.GetComponent<sgObject>() != null) {
                 brushIntPtr = GetExistingIntPtrClean(obrush, false);
@@ -738,14 +777,26 @@ public class GrabAndRotate : MonoBehaviour
             }
             
             sculptureIntPtr = GetExistingIntPtrClean(leftGrabbedObject, true);
+            
 
             gameObjects.Add(brushEmpty);
             
             Debug.Log("Doing subsequent sculpture");
             if(brushIntPtr != IntPtr.Zero) {
-                sculptedIntPtr = boolean_sub(sculptureIntPtr, brushIntPtr);
+                if(isAddMode) {
+                    sculptedIntPtr = boolean_add(sculptureIntPtr, brushIntPtr);
+
+                } else {
+                    sculptedIntPtr = boolean_sub(sculptureIntPtr, brushIntPtr);
+                }
+                
             } else {
-                sculptedIntPtr = boolean_sub(sculptureIntPtr, brushEmpty.GetComponent<sgObject>().GetHandle());
+                if(isAddMode) {
+                    sculptedIntPtr = boolean_add(sculptureIntPtr, brushEmpty.GetComponent<sgObject>().GetHandle());
+                } else {
+                    sculptedIntPtr = boolean_sub(sculptureIntPtr, brushEmpty.GetComponent<sgObject>().GetHandle());
+                }
+                
             }
         }
 
@@ -770,7 +821,12 @@ public class GrabAndRotate : MonoBehaviour
             HideGameObject(sculptureEmpty);
             return;
         } else {
-            tree = sg_export.sub(currentLeft, currentRight, currentHashTree);
+            if(isAddMode) {
+                tree = sg_export.add(currentLeft, currentRight, currentHashTree);
+            } else {
+                tree = sg_export.sub(currentLeft, currentRight, currentHashTree);
+            }
+            
             
             GameObject sculpture = new GameObject("Sculpture");
             sculpture.transform.position = new Vector3(0, 0, 0);
@@ -873,6 +929,16 @@ public class GrabAndRotate : MonoBehaviour
     }
 
     void UndoIntPtr() {
+        if(leftTrees.Count == 0) {
+            Debug.Log("No more undo");
+            return;
+        }
+        Debug.Log("Undoing");
+        HashTreeNode lastTree = leftTrees[leftTrees.Count - 1];
+        leftTrees.RemoveAt(leftTrees.Count - 1);
+        leftTreeRightStack.Push(currentLeft);
+        currentLeft = lastTree;
+
         if(leftIntPtrs.Count == 0) {
             Debug.Log("No more undo");
             return;
@@ -885,9 +951,12 @@ public class GrabAndRotate : MonoBehaviour
         
         
         GameObject newSculpture = new GameObject("Sculpture");
+        moveSgObjectInverse(leftGrabbedObject, lastIntPtr);
+        newSculpture.AddComponent<sgObject>().InitObject(lastIntPtr);
+        
         newSculpture.transform.position = leftGrabbedObject.transform.position;
         newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
-        newSculpture.AddComponent<sgObject>().InitObject(lastIntPtr);
+        
         leftGrabbedObject = newSculpture;
 
         gameObjects.Add(leftGrabbedObject);
@@ -913,6 +982,15 @@ public class GrabAndRotate : MonoBehaviour
     }
 
     void RedoIntPtr() {
+        if(leftTreeRightStack.Count == 0) {
+            Debug.Log("No more redo");
+            return;
+        }
+        Debug.Log("Redoing");
+        HashTreeNode lastTree = leftTreeRightStack.Pop();
+        leftTrees.Add(currentLeft);
+        currentLeft = lastTree;
+
         if(leftIntPtrsRightStack.Count == 0) {
             Debug.Log("No more redo");
             return;
@@ -922,9 +1000,10 @@ public class GrabAndRotate : MonoBehaviour
         HideGameObject(leftGrabbedObject);
 
         GameObject newSculpture = new GameObject("Sculpture");
+        newSculpture.AddComponent<sgObject>().InitObject(lastIntPtr);
         newSculpture.transform.position = leftGrabbedObject.transform.position;
         newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
-        newSculpture.AddComponent<sgObject>().InitObject(lastIntPtr);
+        
         leftGrabbedObject = newSculpture;
 
         gameObjects.Add(leftGrabbedObject);
@@ -949,26 +1028,7 @@ public class GrabAndRotate : MonoBehaviour
 
     }
 
-    void LoadBrush(string path) {
-        HashTree resTree;
-        sg_reconstruction sgr = new sg_reconstruction();
-        GameObject newTool = sgr.Reconstruct(path, out currentHashTree, out currentRight);
-        if(!gameObjects.Contains(rightGrabbedObject )) {
-            gameObjects.Add(rightGrabbedObject);
-        }
-        gameObjects.Add(newTool);
 
-        for(int i = sgr.toFree.Count - 1; i >= 0 ; i--) {
-            intPtrs.Add(sgr.toFree[i]);
-        }
-
-        HideGameObject(rightGrabbedObject);
-
-        newTool.transform.position = rightGrabbedObject.transform.position;
-        newTool.transform.rotation = rightGrabbedObject.transform.rotation;
-
-        rightGrabbedObject = newTool;
-    }
 
     void Update()
     {
@@ -1013,33 +1073,30 @@ public class GrabAndRotate : MonoBehaviour
         if(OVRInput.GetDown(OVRInput.Button.Three)) {
             // create a file called YYYY_MM_DD_HH_MM_SS.txt
             string path = @"C:\Users\edegu\sculptures\" + DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".txt";
-            
+
             sg_export.writeToFile(currentLeft, currentHashTree, path);
             obj_exporter.MeshToFile(leftGrabbedObject.GetComponent<MeshFilter>() , "Assets", "obj_export_" +  DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".obj");
 
         }
 
+        if(OVRInput.GetDown(OVRInput.Button.Start)) {
+            isAddMode = !isAddMode;
+        }
+
+        if(OVRInput.GetDown(OVRInput.Button.Four)) {
+            if(brushIsSmallCube) {
+                brushIsSmallCube = false;
+                LoadBrush(pointePath);
+            } else {
+                brushIsSmallCube = true;
+                LoadBrush(smallCubePath);
+            }
+        }
+
         if(Input.GetKeyDown(KeyCode.R)) {
             string path = EditorUtility.OpenFilePanel("Open file", "Assets/tools", "txt");
             Debug.Log("Selected file: " + path);
-            HashTree resTree;
-            sg_reconstruction sgr = new sg_reconstruction();
-            GameObject newTool = sgr.Reconstruct(path, out currentHashTree, out currentRight);
-            if(!gameObjects.Contains(rightGrabbedObject )) {
-                gameObjects.Add(rightGrabbedObject);
-            }
-            gameObjects.Add(newTool);
-
-            for(int i = sgr.toFree.Count - 1; i >= 0 ; i--) {
-               intPtrs.Add(sgr.toFree[i]);
-            }
-
-            HideGameObject(rightGrabbedObject);
-
-            newTool.transform.position = rightGrabbedObject.transform.position;
-            newTool.transform.rotation = rightGrabbedObject.transform.rotation;
-
-            rightGrabbedObject = newTool;
+            LoadBrush(path);
         }
 
         if(Input.GetKeyDown(KeyCode.L)) {
@@ -1052,7 +1109,11 @@ public class GrabAndRotate : MonoBehaviour
     void LoadSculpture(string path) {
         HashTree resTree;
             sg_reconstruction sgr = new sg_reconstruction();
-            GameObject newSculpture = sgr.Reconstruct(path, out currentHashTree, out currentLeft);
+            GameObject newSculpture = sgr.Reconstruct(path, out resTree, out currentLeft);
+
+            currentHashTree.IngestTreeDontSetRoot(resTree);
+            
+
             if(!gameObjects.Contains(leftGrabbedObject )) {
                 gameObjects.Add(leftGrabbedObject);
             }
@@ -1069,5 +1130,27 @@ public class GrabAndRotate : MonoBehaviour
 
             leftGrabbedObject = newSculpture;
 
+    }
+
+    void LoadBrush(string path) {
+        sg_reconstruction sgr = new sg_reconstruction();
+        HashTree resTree;
+        GameObject newTool = sgr.Reconstruct(path, out resTree, out currentRight);
+        currentHashTree.IngestTreeDontSetRoot(resTree);
+        if(!gameObjects.Contains(rightGrabbedObject )) {
+            gameObjects.Add(rightGrabbedObject);
+        }
+        gameObjects.Add(newTool);
+
+        for(int i = sgr.toFree.Count - 1; i >= 0 ; i--) {
+            intPtrs.Add(sgr.toFree[i]);
+        }
+
+        HideGameObject(rightGrabbedObject);
+
+        newTool.transform.position = rightGrabbedObject.transform.position;
+        newTool.transform.rotation = rightGrabbedObject.transform.rotation;
+
+        rightGrabbedObject = newTool;
     }
 }

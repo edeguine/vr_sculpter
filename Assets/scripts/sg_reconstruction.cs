@@ -74,6 +74,10 @@ public class sg_reconstruction
             HashTreeNode leftChild = tree.getChildren(node)[0];
             HashTreeNode rightChild = tree.getChildren(node)[1];
             x = myBooleanSub(evaluateNode(leftChild, tree), evaluateNode(rightChild, tree));
+        } else if(node.name == "sg_bool_add") {
+            HashTreeNode leftChild = tree.getChildren(node)[0];
+            HashTreeNode rightChild = tree.getChildren(node)[1];
+            x = myBooleanAdd(evaluateNode(leftChild, tree), evaluateNode(rightChild, tree));
         } else {
             Debug.Log("Unknown node name: X" + node.name + "X");
             Debug.Log(node.name == "sg_object_move");
@@ -86,6 +90,32 @@ public class sg_reconstruction
     private static IntPtr myBooleanSub(IntPtr first, IntPtr second) {
         IntPtr res = IntPtr.Zero;
         IntPtr subResGroup = SolidGeometryLibIntegration.sg_bool_sub(first, second);
+
+            if (subResGroup != IntPtr.Zero)
+            {
+                if (SolidGeometryLibIntegration.sg_object_type(subResGroup) == 10)   //  10 - type of group
+                {
+                    int chCnt = SolidGeometryLibIntegration.sg_group_child_count(subResGroup);
+                    Debug.Log("subResGroup has " + chCnt.ToString() + " children");
+                    // just get the first group
+                    for (int i = 0; i < chCnt && i < 1; i++)
+                    {
+                        IntPtr curCh = SolidGeometryLibIntegration.sg_group_child(subResGroup, i);
+                        res = curCh;
+                    }
+                    SolidGeometryLibIntegration.sg_group_break(subResGroup);
+                } else {
+                    Debug.Log("subResGroup is not a group");
+                }
+            } else {
+                Debug.Log("subResGroup is null");
+            }
+        return res;
+    }
+
+    private static IntPtr myBooleanAdd(IntPtr first, IntPtr second) {
+        IntPtr res = IntPtr.Zero;
+        IntPtr subResGroup = SolidGeometryLibIntegration.sg_bool_union(first, second);
 
             if (subResGroup != IntPtr.Zero)
             {

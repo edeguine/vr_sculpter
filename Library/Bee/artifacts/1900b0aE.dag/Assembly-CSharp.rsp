@@ -424,6 +424,10 @@
 -r:"Library/Bee/artifacts/1900b0aE.dag/VoiceSDK.Runtime.ref.dll"
 -analyzer:"C:/Program Files/Unity/Hub/Editor/2022.3.0f1/Editor/Data/Tools/Unity.SourceGenerators/Unity.Properties.SourceGenerator.dll"
 -analyzer:"C:/Program Files/Unity/Hub/Editor/2022.3.0f1/Editor/Data/Tools/Unity.SourceGenerators/Unity.SourceGenerators.dll"
+"Assets/Geometros/SolidGeometryLib/Scripts/CameraController.cs"
+"Assets/Geometros/SolidGeometryLib/Scripts/SelectionChecker.cs"
+"Assets/Geometros/SolidGeometryLib/Scripts/sgObject.cs"
+"Assets/Geometros/SolidGeometryLib/Scripts/SolidGeometryLibIntegration.cs"
 "Assets/Oculus/SampleFramework/Core/CustomHands/Scripts/Hand.cs"
 "Assets/Oculus/SampleFramework/Core/CustomHands/Scripts/HandPose.cs"
 "Assets/Oculus/SampleFramework/Core/DebugUI/Scripts/DebugUIBuilder.cs"
@@ -556,7 +560,14 @@
 "Assets/Oculus/SampleFramework/Usage/TouchPro/Scripts/Ui/UiSceneMenu.cs"
 "Assets/Oculus/SampleFramework/Usage/TouchPro/Scripts/Ui/UiVectorInspector.cs"
 "Assets/Oculus/Voice/Lib/Wit.ai/AssemblyInfo.cs"
+"Assets/scripts/GrabAndRotate.cs"
 "Assets/scripts/HandsController.cs"
+"Assets/scripts/HashTree.cs"
+"Assets/scripts/HashTreeNode.cs"
+"Assets/scripts/obj_exporter.cs"
+"Assets/scripts/sg_export.cs"
+"Assets/scripts/sg_reconstruction.cs"
+"Assets/scripts/TreeNode.cs"
 -langversion:9.0
 
 /deterministic

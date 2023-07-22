@@ -25,6 +25,21 @@ public class HashTree
         return result;
     }
 
+    public void IngestTreeDontSetRoot(HashTree tree) {
+
+        // add all the nodes in the tree to this tree
+        foreach(HashTreeNode node in tree.hashTree.Values) {
+            addNodeNoRelatives(node);
+        }
+
+        // add all the children in the tree to this tree
+        foreach(HashTreeNode node in tree.hashTree.Values) {
+            foreach(HashTreeNode child in tree.getChildren(node)) {
+                addChild(node, child);
+            }
+        }
+    }
+
     public void addChild(HashTreeNode parent, HashTreeNode child) {
         if(!hashTree.ContainsKey(parent.hash)) {
             Debug.Log("Adding children parent reinit " + parent.hash);

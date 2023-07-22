@@ -72,6 +72,15 @@ public class sg_export : MonoBehaviour
         return sub;
     }
 
+     public static HashTreeNode add(HashTreeNode first, HashTreeNode second, HashTree tree) {
+        HashTreeNode sub = new HashTreeNode("sg_bool_add");
+        tree.addNodeNoRelatives(sub);
+        tree.addChild(sub, first);
+        tree.addChild(sub, second);
+
+        return sub;
+    }
+
     public static void writeToFile(HashTreeNode newRoot, HashTree tree, string filename) {
         sg_reconstruction sgr = new sg_reconstruction();
         HashTree ttree = sgr.CopyTree(tree);
