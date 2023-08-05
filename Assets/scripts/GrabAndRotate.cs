@@ -821,6 +821,10 @@ public class GrabAndRotate : MonoBehaviour
                 }
                 
             }
+
+            moveSgObjectInverse(leftGrabbedObject, currentLeftIntPtr);
+            leftTrees.Add(currentLeft);
+            leftIntPtrs.Add(currentLeftIntPtr);
         }
 
         intPtrs.Add(sculptureIntPtr);
@@ -833,7 +837,6 @@ public class GrabAndRotate : MonoBehaviour
             currentLeft = moveTreeInverse(leftGrabbedObject, currentLeft);
             currentRight = moveTreeInverse(obrush, currentRight);
             if (sculptureIntPtr != IntPtr.Zero) {
-                moveSgObjectInverse(leftGrabbedObject, sculptureIntPtr);
                 currentLeftIntPtr = sculptureIntPtr;
             }
             if (brushIntPtr != IntPtr.Zero) {
@@ -863,8 +866,6 @@ public class GrabAndRotate : MonoBehaviour
             tree = moveTreeInverse(leftGrabbedObject, tree);
             currentLeft = tree;
 
-            leftTrees.Add(currentLeft);
-            leftIntPtrs.Add(currentLeftIntPtr);
 
             currentRight = moveTreeInverse(obrush, currentRight);
 
@@ -1145,12 +1146,15 @@ public class GrabAndRotate : MonoBehaviour
         }
         
         if(isSculpture) {
+            // we cannot properly undo scaling without scaling the other way, so we just keep track
+            // of current ptr and tree for saving purposes but not undoing purposes
+            // TODO fix save / load after scaling, object seems to move far away
             if(objIntPtr != IntPtr.Zero) {
                 currentLeftIntPtr = objIntPtr;
-                leftIntPtrs.Add(objIntPtr);
+                //leftIntPtrs.Add(objIntPtr);
             }
             currentLeft = newNode;
-            leftTrees.Add(newNode);
+            //leftTrees.Add(newNode);
         } else {
             if (objIntPtr != IntPtr.Zero) {
                 currentRightIntPtr = objIntPtr;
