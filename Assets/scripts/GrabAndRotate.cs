@@ -62,6 +62,7 @@ public class GrabAndRotate : MonoBehaviour
 
     private bool brushIsSmallCube = true;
     private string pointePath = @"C:\Users\edegu\vr_sculpter\Assets\tools\pointe.txt";
+    private string testPath = @"C:\Users\edegu\vr_sculpter\Assets\tools\simple_two_cubes.txt";
     private string smallCubePath = @"C:\Users\edegu\sculptures\small_cube_2023_07_22_12_22_17.txt";
 
     void Start()
@@ -81,8 +82,14 @@ public class GrabAndRotate : MonoBehaviour
             sgStarted = true;
         }
 
-        LoadBrush(pointePath);
+        //LoadBrush(pointePath);
+        LoadBrush(testPath);
         brushIsSmallCube = true;
+
+        /*
+        leftGrabbedObject.transform.position = new Vector3(0, 0, 3);
+        rightGrabbedObject.transform.position = new Vector3(0, 0.7f, 3);
+        debugPositionWithLeft(rightGrabbedObject);*/
     }
         
 
@@ -929,7 +936,7 @@ public class GrabAndRotate : MonoBehaviour
     }
 
     void UndoIntPtr() {
-        if(leftTrees.Count == 0) {
+        if(leftTrees.Count == 0 || leftIntPtrs.Count == 0) {
             Debug.Log("No more undo");
             return;
         }
@@ -938,11 +945,6 @@ public class GrabAndRotate : MonoBehaviour
         leftTrees.RemoveAt(leftTrees.Count - 1);
         leftTreeRightStack.Push(currentLeft);
         currentLeft = lastTree;
-
-        if(leftIntPtrs.Count == 0) {
-            Debug.Log("No more undo");
-            return;
-        }
         Debug.Log("Undoing");
         IntPtr lastIntPtr = leftIntPtrs[leftIntPtrs.Count - 1];
         leftIntPtrs.RemoveAt(leftIntPtrs.Count - 1);
@@ -1035,10 +1037,12 @@ public class GrabAndRotate : MonoBehaviour
         //handleHandKeyboard(rightHand, leftGrabbedObject, true);
         //handleHandKeyboard(rightHand, rightGrabbedObject, false);
 
+        
+
         handleHand(leftController, leftGrabbedObject, true);
         handleHand(rightController, rightGrabbedObject, false);
-
         handlePinch(leftGrabbedObject);
+
 
         if(Input.GetKeyDown(KeyCode.S)) {
             string path = EditorUtility.SaveFilePanel("Save file as", "Assets/tools", "MyCoolSculptingTool", "txt");
@@ -1107,11 +1111,23 @@ public class GrabAndRotate : MonoBehaviour
     }
 
     void LoadSculpture(string path) {
-        HashTree resTree;
+            HashTree resTree;
             sg_reconstruction sgr = new sg_reconstruction();
+            Debug.Log("Reconstructing tree");
             GameObject newSculpture = sgr.Reconstruct(path, out resTree, out currentLeft);
+            Debug.Log("Reingesting tree");
 
             currentHashTree.IngestTreeDontSetRoot(resTree);
+
+            // clear leftTrees and rightTrees
+            leftTrees.Clear();
+            leftTreeRightStack.Clear(); 
+            leftIntPtrs.Clear();
+            leftIntPtrsRightStack.Clear();
+
+            leftTrees.Add(currentLeft);
+            currentLeftIntPtr = newSculpture.GetComponent<sgObject>().GetHandle();
+            leftIntPtrs.Add(currentLeftIntPtr);
             
 
             if(!gameObjects.Contains(leftGrabbedObject )) {
