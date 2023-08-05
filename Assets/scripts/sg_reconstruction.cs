@@ -145,7 +145,7 @@ public class sg_reconstruction
             {
                 evaluationStack.Push(SolidGeometryLibIntegration.sg_object_box(token.floatData[0], token.floatData[1], token.floatData[2]));
 
-            } else if (token.name == "sg_object_rotate" || token.name == "sg_object_move")
+            } else if (token.name == "sg_object_rotate" || token.name == "sg_object_move" || token.name == "sg_object_scale")
             {
                 IntPtr leftOperand = evaluationStack.Pop();
                 switch (token.name)
@@ -155,6 +155,9 @@ public class sg_reconstruction
                         break;
                     case "sg_object_move":
                         SolidGeometryLibIntegration.sg_object_move(leftOperand, token.floatData[0], token.floatData[1], token.floatData[2]);
+                        break;
+                    case "sg_object_scale":
+                        SolidGeometryLibIntegration.sg_object_scale(leftOperand, token.floatData[0], token.floatData[1], token.floatData[2]);
                         break;
                 }
                 evaluationStack.Push(leftOperand);

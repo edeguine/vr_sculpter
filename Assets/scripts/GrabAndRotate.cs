@@ -45,7 +45,9 @@ public class GrabAndRotate : MonoBehaviour
     private bool isGrabbing = false;
     private bool isHoldingLeft = false;
     private bool isHoldingRight = false;
+
     private float timeSinceLastSculpt = 0.0f;
+    private float timeSinceLastScale = 0.0f;
 
     private Vector3 lastLeftHandPosition = new Vector3(0.0f, 0.0f, 2.0f);
     private Vector3 lastLeftPalmPosition = Vector3.zero;
@@ -61,12 +63,21 @@ public class GrabAndRotate : MonoBehaviour
     private bool isAddMode = false;
 
     private bool brushIsSmallCube = true;
+
+    private int toolIndex = 0;
     private string pointePath = @"C:\Users\edegu\vr_sculpter\Assets\tools\pointe.txt";
     private string testPath = @"C:\Users\edegu\vr_sculpter\Assets\tools\simple_two_cubes.txt";
     private string smallCubePath = @"C:\Users\edegu\sculptures\small_cube_2023_07_22_12_22_17.txt";
 
+    private List<String> defaultToolsPaths = new List<String>();
+
     void Start()
     {
+        defaultToolsPaths.Add(pointePath);
+        defaultToolsPaths.Add(testPath);
+        defaultToolsPaths.Add(smallCubePath);
+        toolIndex = 0;
+
         if(!sgStarted) {
             Debug.Log("sgstart Start");
             // do a try catch for debug log
@@ -82,14 +93,9 @@ public class GrabAndRotate : MonoBehaviour
             sgStarted = true;
         }
 
-        //LoadBrush(pointePath);
-        LoadBrush(testPath);
-        brushIsSmallCube = true;
+        LoadBrush(defaultToolsPaths[toolIndex]);
+        debugPositionWithLeft(rightGrabbedObject);
 
-        /*
-        leftGrabbedObject.transform.position = new Vector3(0, 0, 3);
-        rightGrabbedObject.transform.position = new Vector3(0, 0.7f, 3);
-        debugPositionWithLeft(rightGrabbedObject);*/
     }
         
 
@@ -655,6 +661,23 @@ public class GrabAndRotate : MonoBehaviour
         return ptr;
     }
 
+    IntPtr moveIntPtr(GameObject original, IntPtr ptr) {
+        // warning this will move the stuff
+        Vector3 rotationAxis = getRotationAxis(original);
+        float rotationAngleRad = getRotationAngleRad(original);
+        Vector3 newPosition = getNewPosition(original);
+
+        SolidGeometryLibIntegration.sg_object_rotate(ptr,
+            original.transform.position.x, original.transform.position.y, original.transform.position.z,
+            rotationAxis.x, rotationAxis.y, rotationAxis.z, rotationAngleRad);
+
+        SolidGeometryLibIntegration.sg_object_move(ptr, 
+            newPosition.x + original.transform.localScale.x / 2.0f, 
+            newPosition.y + original.transform.localScale.y / 2.0f,
+            newPosition.z + original.transform.localScale.z / 2.0f);
+        return ptr;
+    }
+
     void testIntPtrShared() {
         /*
         Scenarios:
@@ -751,9 +774,6 @@ public class GrabAndRotate : MonoBehaviour
             gameObjects.Add(brushEmpty);
             gameObjects.Add(sculptureEmpty);
             
-            leftTrees.Add(moveTreeInverse(leftGrabbedObject, currentLeft));
-           
-
             Debug.Log("Doing first sculpture");
             if(brushIntPtr != IntPtr.Zero) {
                 if(isAddMode) {
@@ -771,10 +791,6 @@ public class GrabAndRotate : MonoBehaviour
                 
             }
         } else {
-            leftTrees.Add(currentLeft);
-            leftIntPtrs.Add(currentLeftIntPtr);
-           
-
             if(obrush.GetComponent<sgObject>() != null) {
                 brushIntPtr = GetExistingIntPtrClean(obrush, false);
                 Debug.Log("Loaded brushIntPtr");
@@ -834,6 +850,9 @@ public class GrabAndRotate : MonoBehaviour
                 tree = sg_export.sub(currentLeft, currentRight, currentHashTree);
             }
             
+            // clear up forward history
+            leftTreeRightStack.Clear();
+            leftIntPtrsRightStack.Clear();
             
             GameObject sculpture = new GameObject("Sculpture");
             sculpture.transform.position = new Vector3(0, 0, 0);
@@ -841,10 +860,13 @@ public class GrabAndRotate : MonoBehaviour
 
             moveSgObjectInverse(leftGrabbedObject, sculptedIntPtr);
             currentLeftIntPtr = sculptedIntPtr;
-
-            currentRight = moveTreeInverse(obrush, currentRight);
             tree = moveTreeInverse(leftGrabbedObject, tree);
             currentLeft = tree;
+
+            leftTrees.Add(currentLeft);
+            leftIntPtrs.Add(currentLeftIntPtr);
+
+            currentRight = moveTreeInverse(obrush, currentRight);
 
             if (brushIntPtr != IntPtr.Zero) {
                 moveSgObjectInverse(obrush, brushIntPtr);
@@ -914,94 +936,52 @@ public class GrabAndRotate : MonoBehaviour
         Destroy(obj);
     }
 
-    void Undo() {
-        if(leftTrees.Count == 0) {
-            Debug.Log("No more undo");
-            return;
-        }
-        Debug.Log("Undoing");
-        HashTreeNode lastTree = leftTrees[leftTrees.Count - 1];
-        leftTrees.RemoveAt(leftTrees.Count - 1);
-        HideGameObject(leftGrabbedObject);
-        
-        
-        GameObject newSculpture = reconstruction.ReconstructFromTree(lastTree, currentHashTree);
-        newSculpture.transform.position = leftGrabbedObject.transform.position;
-        newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
-        leftGrabbedObject = newSculpture;
-
-        gameObjects.Add(leftGrabbedObject);
-        leftTreeRightStack.Push(currentLeft);
-        currentLeft = lastTree;
-    }
-
     void UndoIntPtr() {
         if(leftTrees.Count == 0 || leftIntPtrs.Count == 0) {
             Debug.Log("No more undo");
             return;
         }
         Debug.Log("Undoing");
+        leftTreeRightStack.Push(currentLeft);
+        leftIntPtrsRightStack.Push(currentLeftIntPtr);
+
         HashTreeNode lastTree = leftTrees[leftTrees.Count - 1];
         leftTrees.RemoveAt(leftTrees.Count - 1);
-        leftTreeRightStack.Push(currentLeft);
         currentLeft = lastTree;
-        Debug.Log("Undoing");
         IntPtr lastIntPtr = leftIntPtrs[leftIntPtrs.Count - 1];
         leftIntPtrs.RemoveAt(leftIntPtrs.Count - 1);
-
+        currentLeftIntPtr = lastIntPtr;
         HideGameObject(leftGrabbedObject);
         
         
         GameObject newSculpture = new GameObject("Sculpture");
-        moveSgObjectInverse(leftGrabbedObject, lastIntPtr);
+        //moveIntPtrInverse(leftGrabbedObject, lastIntPtr);
         newSculpture.AddComponent<sgObject>().InitObject(lastIntPtr);
-        
         newSculpture.transform.position = leftGrabbedObject.transform.position;
         newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
         
         leftGrabbedObject = newSculpture;
 
         gameObjects.Add(leftGrabbedObject);
-        leftIntPtrsRightStack.Push(currentLeftIntPtr);
-        currentLeftIntPtr = lastIntPtr;
-    }
-
-    void Redo() {
-        if(leftTreeRightStack.Count == 0) {
-            Debug.Log("No more redo");
-            return;
-        }
-        Debug.Log("Redoing");
-        HashTreeNode lastTree = leftTreeRightStack.Pop();
-        HideGameObject(leftGrabbedObject);
-        GameObject newSculpture = reconstruction.ReconstructFromTree(lastTree, currentHashTree);
-        newSculpture.transform.position = leftGrabbedObject.transform.position;
-        newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
-        leftGrabbedObject = newSculpture;
-        gameObjects.Add(leftGrabbedObject);
-        leftTrees.Add(currentLeft);
-        currentLeft = lastTree;
     }
 
     void RedoIntPtr() {
-        if(leftTreeRightStack.Count == 0) {
+        if(leftTreeRightStack.Count == 0 || leftIntPtrsRightStack.Count == 0) {
             Debug.Log("No more redo");
             return;
         }
         Debug.Log("Redoing");
-        HashTreeNode lastTree = leftTreeRightStack.Pop();
         leftTrees.Add(currentLeft);
-        currentLeft = lastTree;
+        leftIntPtrs.Add(currentLeftIntPtr);
 
-        if(leftIntPtrsRightStack.Count == 0) {
-            Debug.Log("No more redo");
-            return;
-        }
-        Debug.Log("Redoing");
+        HashTreeNode lastTree = leftTreeRightStack.Pop();
+        currentLeft = lastTree;
         IntPtr lastIntPtr = leftIntPtrsRightStack.Pop();
+        currentLeftIntPtr = lastIntPtr;
         HideGameObject(leftGrabbedObject);
 
         GameObject newSculpture = new GameObject("Sculpture");
+        
         newSculpture.AddComponent<sgObject>().InitObject(lastIntPtr);
         newSculpture.transform.position = leftGrabbedObject.transform.position;
         newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
@@ -1009,9 +989,6 @@ public class GrabAndRotate : MonoBehaviour
         leftGrabbedObject = newSculpture;
 
         gameObjects.Add(leftGrabbedObject);
-
-        leftIntPtrs.Add(currentLeftIntPtr);
-        currentLeftIntPtr = lastIntPtr;
     }
 
     void RenameObject(GameObject obj, string newName) {
@@ -1088,13 +1065,9 @@ public class GrabAndRotate : MonoBehaviour
         }
 
         if(OVRInput.GetDown(OVRInput.Button.Four)) {
-            if(brushIsSmallCube) {
-                brushIsSmallCube = false;
-                LoadBrush(pointePath);
-            } else {
-                brushIsSmallCube = true;
-                LoadBrush(smallCubePath);
-            }
+            toolIndex = (toolIndex + 1) % defaultToolsPaths.Count;
+            Debug.Log("Tool index: " + toolIndex);
+            LoadBrush(defaultToolsPaths[toolIndex]);
         }
 
         if(Input.GetKeyDown(KeyCode.R)) {
@@ -1108,7 +1081,84 @@ public class GrabAndRotate : MonoBehaviour
             Debug.Log("Selected file: " + path);
             LoadSculpture(path);
         }
+
+
+        // if right joystick up, scale up the brush
+        timeSinceLastScale += Time.deltaTime;
+        if(OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick).y > 0.5f && rightGrabbedObject != null && timeSinceLastScale > 0.1f) {
+            ScaleObject(rightGrabbedObject, currentRight, 1.05f, false);
+            timeSinceLastScale = 0.0f;
+        }
+
+        if(OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick).y < -0.5f && rightGrabbedObject != null && timeSinceLastScale > 0.1f) {
+            ScaleObject(rightGrabbedObject, currentRight, 0.95f, false);
+            timeSinceLastScale = 0.0f;
+        }
+
+        if(OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick).y > 0.5f && leftGrabbedObject != null && timeSinceLastScale > 0.1f) {
+            ScaleObject(leftGrabbedObject, currentLeft, 1.05f, true);
+            timeSinceLastScale = 0.0f;
+        }
+
+        if(OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick).y < -0.5f && leftGrabbedObject != null && timeSinceLastScale > 0.1f) {
+            ScaleObject(leftGrabbedObject, currentLeft, 0.95f, true);
+            timeSinceLastScale = 0.0f;
+        }
     }
+
+
+    void ScaleObject(GameObject obj, HashTreeNode node, float scale, bool isSculpture) {
+        IntPtr objIntPtr = obj.GetComponent<sgObject>().GetHandle();
+        SolidGeometryLibIntegration.sg_object_scale(objIntPtr, scale, scale, scale);
+        HashTreeNode newNode = sg_export.scale(node, currentHashTree, scale, scale, scale);
+        intPtrs.Add(objIntPtr);
+
+        GameObject newObj = new GameObject("Sculpture");
+        if(!isSculpture) {
+            newObj.name = "Brush";
+        }
+        
+        sgObject newSgObj = newObj.AddComponent<sgObject>();
+        newSgObj.InitObject(objIntPtr);
+        BoxCollider[] boxColliders = newObj.GetComponents<BoxCollider>();
+        for(int i = 0; i < boxColliders.Length; i++) {
+            DestroyImmediate(boxColliders[i]);
+        }
+
+        if(isSculpture) {
+            newObj.transform.position = leftGrabbedObject.transform.position;
+            newObj.transform.rotation = leftGrabbedObject.transform.rotation;
+            RenameObject(leftGrabbedObject, "oldSculpture");
+            gameObjects.Add(leftGrabbedObject);
+            gameObjects.Add(newObj);
+            HideGameObject(leftGrabbedObject);
+            leftGrabbedObject = newObj;
+            
+        } else {
+            newObj.transform.position = rightGrabbedObject.transform.position;
+            newObj.transform.rotation = rightGrabbedObject.transform.rotation;
+            RenameObject(rightGrabbedObject, "oldBrush");
+            gameObjects.Add(rightGrabbedObject);
+            gameObjects.Add(newObj);
+            HideGameObject(rightGrabbedObject);
+            rightGrabbedObject = newObj;
+        }
+        
+        if(isSculpture) {
+            if(objIntPtr != IntPtr.Zero) {
+                currentLeftIntPtr = objIntPtr;
+                leftIntPtrs.Add(objIntPtr);
+            }
+            currentLeft = newNode;
+            leftTrees.Add(newNode);
+        } else {
+            if (objIntPtr != IntPtr.Zero) {
+                currentRightIntPtr = objIntPtr;
+            }
+            currentRight = newNode;
+        }
+    }
+
 
     void LoadSculpture(string path) {
             HashTree resTree;
@@ -1125,11 +1175,6 @@ public class GrabAndRotate : MonoBehaviour
             leftIntPtrs.Clear();
             leftIntPtrsRightStack.Clear();
 
-            leftTrees.Add(currentLeft);
-            currentLeftIntPtr = newSculpture.GetComponent<sgObject>().GetHandle();
-            leftIntPtrs.Add(currentLeftIntPtr);
-            
-
             if(!gameObjects.Contains(leftGrabbedObject )) {
                 gameObjects.Add(leftGrabbedObject);
             }
@@ -1143,8 +1188,12 @@ public class GrabAndRotate : MonoBehaviour
 
             newSculpture.transform.position = leftGrabbedObject.transform.position;
             newSculpture.transform.rotation = leftGrabbedObject.transform.rotation;
-
             leftGrabbedObject = newSculpture;
+
+            IntPtr newIntPtr = newSculpture.GetComponent<sgObject>().GetHandle();
+            currentLeftIntPtr = newIntPtr;
+            leftIntPtrs.Add(newIntPtr);
+            leftTrees.Add(currentLeft);
 
     }
 

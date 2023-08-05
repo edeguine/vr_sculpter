@@ -62,6 +62,22 @@ public class sg_export : MonoBehaviour
         return move;
     }
 
+    public static HashTreeNode scale(HashTreeNode node, HashTree tree, float x, float y, float z) {
+        List<float> floatData = new List<float>();
+        
+        floatData.Add(x);
+        floatData.Add(y);
+        floatData.Add(z);
+
+        HashTreeNode scale = new HashTreeNode("sg_object_scale", floatData);
+        tree.addNodeNoRelatives(scale);
+        tree.addChild(scale, node);
+
+        Debug.Log("Scaling " + scale.hash + " X " + node.hash + "X");
+
+        return scale;
+    }
+
     // sg_bool_sub(firstSelected, secondSelected);
     public static HashTreeNode sub(HashTreeNode first, HashTreeNode second, HashTree tree) {
         HashTreeNode sub = new HashTreeNode("sg_bool_sub");
