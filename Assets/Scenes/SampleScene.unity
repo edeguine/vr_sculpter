@@ -141,7 +141,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &540459124
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -238,6 +238,7 @@ GameObject:
   m_Component:
   - component: {fileID: 843794739}
   - component: {fileID: 843794740}
+  - component: {fileID: 843794741}
   m_Layer: 0
   m_Name: SculptureController
   m_TagString: Untagged
@@ -267,7 +268,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 843794738}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: ceaf460c87ee6477a8ffbc3e314e3b3b, type: 3}
   m_Name: 
@@ -276,6 +277,27 @@ MonoBehaviour:
   rightGrabbedObject: {fileID: 887873398}
   leftController: 1
   rightController: 2
+  leftRotationAmplification: 0
+  rightRotationAmplification: 0
+  distMultiplier: 2
+--- !u!114 &843794741
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 843794738}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b08bb91c6c50e2343a1441d6f3b4b551, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  leftGrabbedObject: {fileID: 0}
+  rightGrabbedObject: {fileID: 0}
+  sculpture: {fileID: 0}
+  brush: {fileID: 0}
+  leftController: 0
+  rightController: 0
   leftRotationAmplification: 0
   rightRotationAmplification: 0
   distMultiplier: 2
@@ -297,7 +319,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &887873399
 BoxCollider:
   m_ObjectHideFlags: 0

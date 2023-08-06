@@ -565,6 +565,7 @@
 "Assets/scripts/HashTree.cs"
 "Assets/scripts/HashTreeNode.cs"
 "Assets/scripts/obj_exporter.cs"
+"Assets/scripts/Sculpt.cs"
 "Assets/scripts/sg_export.cs"
 "Assets/scripts/sg_reconstruction.cs"
 "Assets/scripts/TreeNode.cs"
