@@ -17,7 +17,12 @@ public class sg_reconstruction
         //IntPtr result = evaluateNode(root, tree);
         Stack<HashTreeNode> stack = new Stack<HashTreeNode>();
         PostOrderIterative(root, tree, stack);
-        IntPtr result = PostOrderEvaluate(stack); 
+        IntPtr result = PostOrderEvaluate(stack);
+        if(result == IntPtr.Zero) {
+            Debug.Log("Reconstruct result is null");
+        } else {
+            Debug.Log("Reconstruct result is not null");
+        }
         // drop the last toFree ptr because it will be freed when reconstructued is destroyed
         if(toFree.Count > 0) {
             toFree.RemoveAt(toFree.Count - 1);
@@ -50,7 +55,7 @@ public class sg_reconstruction
         foreach(HashTreeNode node in tree.hashTree.Values) {
             foreach(HashTreeNode child in tree.getChildren(node)) {
                 copy.addChild(node, child);
-                Debug.Log("Copying children");
+                //Debug.Log("Copying children");
             }
         }
         

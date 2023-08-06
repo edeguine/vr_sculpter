@@ -42,24 +42,24 @@ public class HashTree
 
     public void addChild(HashTreeNode parent, HashTreeNode child) {
         if(!hashTree.ContainsKey(parent.hash)) {
-            Debug.Log("Adding children parent reinit " + parent.hash);
+            //Debug.Log("Adding children parent reinit " + parent.hash);
             hashTree[parent.hash] = parent;
             hashTreeChildren[parent.hash] = new List<string>();
         }
 
         if(!hashTree.ContainsKey(child.hash)) {
-            Debug.Log("Adding children reinit " + child.hash);
+            //Debug.Log("Adding children reinit " + child.hash);
             hashTree[child.hash] = child;
             hashTreeChildren[child.hash] = new List<string>();
         }
 
         if(!hashTreeChildren[parent.hash].Contains(child.hash)) {
-            Debug.Log("Adding children " + parent.hash + "  " + child.hash);
+            //Debug.Log("Adding children " + parent.hash + "  " + child.hash);
             hashTreeChildren[parent.hash].Add(child.hash);
-            Debug.Log("Children added " + hashTreeChildren[parent.hash].Contains(child.hash));
+            //Debug.Log("Children added " + hashTreeChildren[parent.hash].Contains(child.hash));
         }
 
-        Debug.Log("Number of children " + hashTreeChildren[parent.hash].Count);
+        //Debug.Log("Number of children " + hashTreeChildren[parent.hash].Count);
     }
 
     public void addNewRoot(HashTreeNode node) {
@@ -71,7 +71,7 @@ public class HashTree
     
     public void addNodeNoRelatives(HashTreeNode node) {
         if(!hashTree.ContainsKey(node.hash)) {
-            Debug.Log("Adding children node " + node.hash);
+            //Debug.Log("Adding children node " + node.hash);
             hashTree[node.hash] = node;
             hashTreeChildren[node.hash] = new List<string>();
         }
@@ -86,10 +86,10 @@ public class HashTree
         using (StreamWriter sw = new StreamWriter(filename_hash_tree_children))
         {
             foreach(KeyValuePair<string, List<string>> entry in hashTreeChildren) {
-                Debug.Log("Writing children " + entry.Key);
-                Debug.Log("Writing children " + entry.Key + " " + entry.Value.Count);
+                //Debug.Log("Writing children " + entry.Key);
+                //Debug.Log("Writing children " + entry.Key + " " + entry.Value.Count);
                 string linetowrite = $"{entry.Key}: {string.Join(",", entry.Value)}";
-                Debug.Log(linetowrite);
+                //Debug.Log(linetowrite);
                 sw.WriteLine(linetowrite);
             }
         }
@@ -121,7 +121,7 @@ public class HashTree
             while ((line = sr.ReadLine()) != null)
             {
                 HashTreeNode node = HashTreeNode.FromString(line);
-                Debug.Log("Adding node " + node.hash);
+                //Debug.Log("Adding node " + node.hash);
                 addNodeNoRelatives(node);
             }
         }
@@ -133,7 +133,7 @@ public class HashTree
             string line;
             while ((line = sr.ReadLine()) != null)
             {
-                Debug.Log("parsing children line " + line);
+                //Debug.Log("parsing children line " + line);
                 string[] split = line.Split(": ");
                 string hash = split[0];
                 string[] children = split[1].Split(',');

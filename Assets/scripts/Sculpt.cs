@@ -53,7 +53,7 @@ public class Sculpture : ScriptableObject {
         // history
         currentHashTree = new HashTree();
         currentVersion = sgObj.GetHandle();
-        currentVersionTree = new HashTreeNode("sg_object_box", new List<float>{1.0f, 1.0f, 1.0f});
+        currentVersionTree = sg_export.box(1.0f, 1.0f, 1.0f, currentHashTree);
         currentVersionTree = sg_export.move(currentVersionTree, currentHashTree, -0.5f, -0.5f, -0.5f);
 
         currentHashTree.addNodeNoRelatives(currentVersionTree);
@@ -248,34 +248,19 @@ public class Sculpture : ScriptableObject {
         return ptr;
     }
 
-    private IntPtr moveIntPtrInverseNoOffset(GameObject original, IntPtr ptr) {
-        // warning this will move the stuff
-        Vector3 rotationAxis = getRotationAxis(original);
-        float rotationAngleRad = getRotationAngleRad(original);
-        Vector3 newPosition = getNewPosition(original);
-
-        SolidGeometryLibIntegration.sg_object_rotate(ptr,
-            original.transform.position.x, original.transform.position.y, original.transform.position.z,
-            rotationAxis.x, rotationAxis.y, rotationAxis.z, -rotationAngleRad);
-
-        SolidGeometryLibIntegration.sg_object_move(ptr, 
-            -newPosition.x - original.transform.localScale.x / 2.0f,
-            -newPosition.y - original.transform.localScale.y / 2.0f,
-            -newPosition.z - original.transform.localScale.z / 2.0f);
-        
-        return ptr;
-    }
-
     HashTreeNode moveTree(GameObject original, HashTreeNode node) {
         Vector3 rotationAxis = getRotationAxis(original);
         float rotationAngleRad = getRotationAngleRad(original);
         Vector3 newPosition = getNewPosition(original);
+        Vector3 rotationCenter = getRotationCenter(original);
 
-        node = sg_export.rotate(node, currentHashTree, original.transform.position.x, original.transform.position.y, original.transform.position.z,
+        node = sg_export.rotate(node, currentHashTree, 
+            rotationCenter.x, rotationCenter.y, rotationCenter.z,
             rotationAxis.x, rotationAxis.y, rotationAxis.z, rotationAngleRad);
-        node = sg_export.move(node, currentHashTree, newPosition.x + original.transform.localScale.x / 2.0f, 
-            newPosition.y + original.transform.localScale.y / 2.0f,
-            newPosition.z + original.transform.localScale.z / 2.0f);
+        node = sg_export.move(node, currentHashTree, 
+            newPosition.x,
+            newPosition.y,
+            newPosition.z);
         return node;
     }
 
@@ -283,12 +268,17 @@ public class Sculpture : ScriptableObject {
         Vector3 rotationAxis = getRotationAxis(original);
         float rotationAngleRad = getRotationAngleRad(original);
         Vector3 newPosition = getNewPosition(original);
+        Vector3 rotationCenter = getRotationCenter(original);
 
-        node = sg_export.rotate(node, currentHashTree, original.transform.position.x, original.transform.position.y, original.transform.position.z,
+        
+        node = sg_export.move(node, currentHashTree, 
+            -newPosition.x,
+            -newPosition.y,
+            -newPosition.z);
+
+        node = sg_export.rotate(node, currentHashTree, 
+             rotationCenter.x, rotationCenter.y, rotationCenter.z,
             rotationAxis.x, rotationAxis.y, rotationAxis.z, -rotationAngleRad);
-        node = sg_export.move(node, currentHashTree, -newPosition.x - original.transform.localScale.x / 2.0f, 
-            -newPosition.y - original.transform.localScale.y / 2.0f,
-            -newPosition.z - original.transform.localScale.z / 2.0f);
         return node;
     }
 
@@ -318,6 +308,11 @@ public class Sculpture : ScriptableObject {
 
 
         var original_name = tgameObject.name;
+        // if orignal name ends with _old or _new remove it
+        if(original_name.EndsWith("_old") || original_name.EndsWith("_new")) {
+            original_name = original_name.Substring(0, original_name.Length - 4);
+        }
+
         tgameObject.name = original_name + "_old";
 
         Debug.Log("Old coordinates: " + tgameObject.transform.position.ToString() + " " + tgameObject.transform.rotation.ToString());
@@ -325,6 +320,7 @@ public class Sculpture : ScriptableObject {
         gameObjectstoFree.Add(tgameObject);
 
         tgameObject = resGO;
+        // if orignal name ends with old or new remove it
         tgameObject.name = original_name + "_new";
         Debug.Log("New coordinates: " + tgameObject.transform.position.ToString() + " " + tgameObject.transform.rotation.ToString());
         gameObjectstoFree.Add(tgameObject);
@@ -332,9 +328,27 @@ public class Sculpture : ScriptableObject {
 
     public void load(string path) {
 
+        sg_reconstruction sgr = new sg_reconstruction();
+        HashTree resTree;
+        HashTreeNode resNode;
+        GameObject newTool = sgr.Reconstruct(path, out resTree, out resNode);
+        currentHashTree.IngestTreeDontSetRoot(resTree);
+
+        for(int i = sgr.toFree.Count - 1; i >= 0 ; i--) {
+            intPtrsToFree.Add(sgr.toFree[i]);
+        }
+
+        updateGameObject(newTool.GetComponent<sgObject>().GetHandle(), resNode, true);
+        HideGameObject(newTool);
+    }
+
+    public void save(string path) {
+        sg_export.writeToFile(currentVersionTree, currentHashTree, path);
     }
 
     public void Add(Sculpture brush) {
+
+        currentHashTree.IngestTreeDontSetRoot(brush.currentHashTree);
         
         moveIntPtr(tgameObject, currentVersion);
         moveTree(tgameObject, currentVersionTree);
@@ -366,12 +380,13 @@ public class Sculpture : ScriptableObject {
     }
 
     public void Sub(Sculpture brush) {
-        
+
+        // Add the nodes from brush to currentHashtree
         moveIntPtr(tgameObject, currentVersion);
-        moveTree(tgameObject, currentVersionTree);
+        currentVersionTree = moveTree(tgameObject, currentVersionTree);
 
         moveIntPtr(brush.tgameObject, brush.currentVersion);
-        moveTree(brush.tgameObject, brush.currentVersionTree); 
+        brush.currentVersionTree = moveTree(brush.tgameObject, brush.currentVersionTree); 
 
         Debug.Log("Subtracting ");
         IntPtr res = boolean_sub(currentVersion, brush.currentVersion);
@@ -380,14 +395,16 @@ public class Sculpture : ScriptableObject {
         intPtrsToFree.Add(res);
 
         moveIntPtrInverse(tgameObject, currentVersion);
-        moveTreeInverse(tgameObject, currentVersionTree); // might be optional
+        currentVersionTree = moveTreeInverse(tgameObject, currentVersionTree); // might be optional
 
         moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
-        moveTreeInverse(brush.tgameObject, brush.currentVersionTree); 
+        brush.currentVersionTree = moveTreeInverse(brush.tgameObject, brush.currentVersionTree); 
+
+        currentHashTree.IngestTreeDontSetRoot(brush.currentHashTree);
 
         if(res != IntPtr.Zero) {
             moveIntPtrInverse(tgameObject, res);
-            moveTreeInverse(tgameObject, tree_res);
+            tree_res = moveTreeInverse(tgameObject, tree_res);
 
             updateGameObject(res, tree_res, true);
             Debug.Log("Subtracted ");
@@ -420,8 +437,9 @@ public class Sculpture : ScriptableObject {
     void HideGameObject(GameObject obj) {
         gameObjectstoFree.Add(obj);
         if (obj != null ) {
-            Renderer rend = obj.GetComponent<Renderer>();
-            rend.enabled = false;
+            if(obj.GetComponent<MeshRenderer>() != null) {
+                obj.GetComponent<MeshRenderer>().enabled = false;
+            }
 
             if(obj.GetComponent<sgObject>() != null) {
                 intPtrsToFree.Add(obj.GetComponent<sgObject>().GetHandle());
@@ -575,11 +593,9 @@ public class Sculpt : MonoBehaviour
         sculpture.init();
         sculpture.tgameObject.name = "sculpture";
 
-        Quaternion trotation = Quaternion.Euler(55, 12, 45);
+        Quaternion trotation = Quaternion.Euler(0, 0, 0);
 
-        
-
-        sculpture.setTransforms(new Vector3(0, 2, 3), trotation);
+        sculpture.setTransforms(new Vector3(0, 1.5f, 0), trotation);
         sculpture.testRotation();
 
         brush = new Sculpture();
@@ -587,11 +603,16 @@ public class Sculpt : MonoBehaviour
         brush.tgameObject.name = "brush";
 
         // get a 25 degrees rotation along z as a quaternion using euler angles
-        Quaternion rotation = Quaternion.Euler(0, 0, 10);
+        Quaternion rotation = Quaternion.Euler(0, 0, 0);
 
-        brush.setTransforms(new Vector3(0, 2, 3), rotation);
+        brush.setTransforms(new Vector3(0, 1.0f, 0), rotation);
+        //sculpture.Sub(brush);
 
-        //sculpture.test(brush);
+        //sculpture.save("test.txt");
+        //Debug.Log("Saved");
+
+        //sculpture.load("test.txt");
+
     }
 
     void CleanDestroy(List<GameObject> gameObjectstoFree, List<IntPtr> intPtrsToFree) {
@@ -763,7 +784,7 @@ public class Sculpt : MonoBehaviour
         if(Input.GetKeyDown(KeyCode.S)) {
             string path = EditorUtility.SaveFilePanel("Save file as", "Assets/tools", "MyCoolSculptingTool", "txt");
             Debug.Log("Selected file: " + path);
-            sg_export.writeToFile(sculpture.currentVersionTree, sculpture.currentHashTree, path);
+            sculpture.save(path);
         }
 
         if(OVRInput.GetDown(OVRInput.Button.One)) {
@@ -778,7 +799,7 @@ public class Sculpt : MonoBehaviour
             // create a file called YYYY_MM_DD_HH_MM_SS.txt
             string path = @"C:\Users\edegu\sculptures\" + DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".txt";
 
-            sg_export.writeToFile(sculpture.currentVersionTree, sculpture.currentHashTree, path);
+            sculpture.save(path);
             obj_exporter.MeshToFile(sculpture.tgameObject.GetComponent<MeshFilter>() , "Assets", "obj_export_" +  DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".obj");
 
         }
@@ -790,7 +811,7 @@ public class Sculpt : MonoBehaviour
         if(OVRInput.GetDown(OVRInput.Button.Four)) {
             toolIndex = (toolIndex + 1) % defaultToolsPaths.Count;
             Debug.Log("Tool index: " + toolIndex);
-            //brush.load(defaultToolsPaths[toolIndex]);
+            brush.load(defaultToolsPaths[toolIndex]);
         }
 
         if(Input.GetKeyDown(KeyCode.R)) {
