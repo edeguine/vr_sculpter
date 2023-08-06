@@ -19,7 +19,7 @@ public class HashTreeNode
 
 
 
-    public string ToString() {
+    override public string ToString() {
         string result = name + " " + hash + " ";
         if(floatData != null) {
             result += string.Join(",", floatData);

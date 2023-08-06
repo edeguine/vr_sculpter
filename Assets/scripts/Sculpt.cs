@@ -15,6 +15,9 @@ public class Sculpture : ScriptableObject {
     public List<IntPtr> previousVersion;
     public List<HashTreeNode> previousVersionTree;
 
+    public Stack<IntPtr> nextVersion;
+    public Stack<HashTreeNode> nextVersionTree;
+
     public IntPtr currentVersion;
     public HashTreeNode currentVersionTree;
 
@@ -24,22 +27,32 @@ public class Sculpture : ScriptableObject {
     public HashTree currentHashTree;
 
     public void init() {
-
-        // creation
-        tgameObject = new GameObject();
-        sgObject sgObj = tgameObject.AddComponent<sgObject>();
-        sgObj.InitObject(SolidGeometryLibIntegration.sg_object_box(1.0f, 1.0f, 1.0f));
-
-        previousVersion = new List<IntPtr>();
-        previousVersionTree = new List<HashTreeNode>();
+        // memory
         intPtrsToFree = new List<IntPtr>();
         gameObjectstoFree = new List<GameObject>();
 
-        // history
+        // creation
+        IntPtr initPtr = SolidGeometryLibIntegration.sg_object_box(1.0f, 1.0f, 1.0f);
+        // removeOffset
+        SolidGeometryLibIntegration.sg_object_move(initPtr, -0.5f, -0.5f, -0.5f);
+
+        intPtrsToFree.Add(initPtr);
+        tgameObject = new GameObject();
+        gameObjectstoFree.Add(tgameObject);
+
+        sgObject sgObj = tgameObject.AddComponent<sgObject>();
+        sgObj.InitObject(initPtr);
+
+        previousVersion = new List<IntPtr>();
+        previousVersionTree = new List<HashTreeNode>();
         
+
+        // history
+        currentHashTree = new HashTree();
         currentVersion = sgObj.GetHandle();
         currentVersionTree = new HashTreeNode("sg_object_box", new List<float>{1.0f, 1.0f, 1.0f});
-        currentHashTree = new HashTree();
+        currentVersionTree = sg_export.move(currentVersionTree, currentHashTree, -0.5f, -0.5f, -0.5f);
+
         currentHashTree.addNodeNoRelatives(currentVersionTree);
         currentHashTree.setRoot(currentVersionTree);
 
@@ -47,22 +60,86 @@ public class Sculpture : ScriptableObject {
         previousVersionTree.Add(currentVersionTree);
     }
 
+    public void setTransforms(Vector3 position, Quaternion rotation) {
+        if(position != null) {
+            tgameObject.transform.position = position;
+        }
+        if(rotation != null) {
+            tgameObject.transform.rotation = rotation;
+        }
+    }
+
+    public void Undo() {
+        if(previousVersion.Count > 0 && previousVersionTree.Count > 0) {
+            int index = previousVersion.Count - 1;
+            IntPtr ptr = previousVersion[index];
+            HashTreeNode tree = previousVersionTree[index];
+
+            intPtrsToFree.Add(ptr);
+            intPtrsToFree.Add(currentVersion);
+
+
+            nextVersion.Push(currentVersion);
+            nextVersionTree.Push(currentVersionTree);
+
+            currentVersion = ptr;
+            currentVersionTree = tree;
+
+            previousVersion.RemoveAt(index);
+            previousVersionTree.RemoveAt(index);
+
+            updateGameObject(ptr, tree);
+            Debug.Log("Undid");
+        } else {
+            Debug.Log("Nothing to undo");
+        }
+    }
+
+    public void Redo() {
+        if(nextVersion.Count > 0 && nextVersionTree.Count > 0) {
+            IntPtr ptr = nextVersion.Pop();
+            HashTreeNode tree = nextVersionTree.Pop();
+
+            intPtrsToFree.Add(ptr);
+            intPtrsToFree.Add(currentVersion);
+
+            previousVersion.Add(currentVersion);
+            previousVersionTree.Add(currentVersionTree);
+
+            currentVersion = ptr;
+            currentVersionTree = tree;
+
+            updateGameObject(ptr, tree);
+            Debug.Log("Redid");
+        } else {
+            Debug.Log("Nothing to redo");
+        }
+    }
+
     void Update() {}
     void Start() {}
 
-    public void Scale(float x, float y, float z) {
+    public void Scale(float factor) {
         
     }
 
-    void OnDestroy()
+    public void CleanDestroy()
     {   
-        Debug.Log("OnDestroy");
+        Debug.Log("CleanDestroy");
         Debug.Log("gameObjects.Count: " + gameObjectstoFree.Count.ToString());
+        Debug.Log("intPtrsToFree.Count: " + intPtrsToFree.Count.ToString());
+
+        var alreadyFreedGameObjects = new HashSet<GameObject>();
         var alreadyFreed = new HashSet<IntPtr>();
+
+        int destroyedGameObjectsCount = 0;
+        
         for(int i = gameObjectstoFree.Count - 1; i >= 0; i--) {
             
             if(gameObjectstoFree[i] == null) {
-                Debug.Log("gameObjects[" + i.ToString() + "] is null");
+                continue;
+            }
+            if(alreadyFreedGameObjects.Contains(gameObjectstoFree[i])) {
                 continue;
             }
 
@@ -71,24 +148,29 @@ public class Sculpture : ScriptableObject {
                 alreadyFreed.Add(ptr);
             }
             DestroyImmediate(gameObjectstoFree[i]);
-            Debug.Log("destroyed gameObjects " + i.ToString());
+            destroyedGameObjectsCount++;
+            alreadyFreedGameObjects.Add(gameObjectstoFree[i]);
+            
         }
+        Debug.Log("destroyedGameObjectsCount: " + destroyedGameObjectsCount.ToString());
         // keep track of already freed pointers to avoid double free
         
 
+        int destroyedIntPtrsCount = 0;
         for(int i = intPtrsToFree.Count - 1; i >= 0; i--) {
             if(intPtrsToFree[i] == IntPtr.Zero) {
-                Debug.Log("intPtrs[" + i.ToString() + "] is IntPtr.Zero");
                 continue;
             }
             if(alreadyFreed.Contains(intPtrsToFree[i])) {
-                Debug.Log("intPtrs[" + i.ToString() + "] already freed");
                 continue;
             }
             SolidGeometryLibIntegration.sg_object_free(intPtrsToFree[i]);
+            destroyedIntPtrsCount++;
             alreadyFreed.Add(intPtrsToFree[i]);
-            Debug.Log("freed intPtrs " + i.ToString());
         }
+
+        Debug.Log("destroyedIntPtrsCount: " + destroyedIntPtrsCount.ToString());
+
         intPtrsToFree.Clear();
         gameObjectstoFree.Clear();
 
@@ -177,63 +259,20 @@ public class Sculpture : ScriptableObject {
         return node;
     }
 
-    public void Add(Sculpture brush) {
-        
-        moveIntPtrInverse(tgameObject, currentVersion);
-        moveTreeInverse(tgameObject, currentVersionTree);
-
-        moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
-        moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
-
-
-        IntPtr res = boolean_add(currentVersion, brush.currentVersion);
-        
-        if(res == IntPtr.Zero) {
-            Debug.Log("Sub is null");
-        }
-
-        GameObject resGO = new GameObject();
-        sgObject resSgObj = resGO.AddComponent<sgObject>();
-        resSgObj.InitObject(res);
-
-        resGO.transform.position = tgameObject.transform.position;
-        resGO.transform.rotation = tgameObject.transform.rotation;
-
-        HideGameObject(tgameObject);
-        gameObjectstoFree.Add(tgameObject);
-        tgameObject = resGO;
-    }
-
-    public void Sub(Sculpture brush) {
-        moveIntPtr(tgameObject, currentVersion);
-        moveTree(tgameObject, currentVersionTree);
-
-        moveIntPtr(brush.tgameObject, brush.currentVersion);
-        moveTree(brush.tgameObject, brush.currentVersionTree);
-
-        Debug.Log("Subtracting ");
-        IntPtr res = boolean_sub(currentVersion, brush.currentVersion);
-        HashTreeNode tree_res = sg_export.sub(currentVersionTree, brush.currentVersionTree, currentHashTree);
-
-        moveIntPtrInverse(tgameObject, currentVersion);
-        moveTreeInverse(tgameObject, currentVersionTree); // might be optional
-
-        moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
-        moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
-
-
-        moveIntPtrInverse(tgameObject, res);
-        moveTreeInverse(tgameObject, tree_res);
-
+    public void updateGameObject(IntPtr res, HashTreeNode tree_res) {
         previousVersion.Add(currentVersion);
+        intPtrsToFree.Add(currentVersion);
         currentVersion = res;
 
         previousVersionTree.Add(currentVersionTree);
         currentVersionTree = tree_res;
         
         if(res == IntPtr.Zero) {
-            Debug.Log("Sub is null");
+            Debug.Log("IntPtr is null");
+            return;
         }
+
+        intPtrsToFree.Add(res);
 
         GameObject resGO = new GameObject();
         sgObject resSgObj = resGO.AddComponent<sgObject>();
@@ -248,7 +287,64 @@ public class Sculpture : ScriptableObject {
 
         tgameObject = resGO;
         tgameObject.name = "sculpture";
+        gameObjectstoFree.Add(tgameObject);
+    }
 
+    public void load(string path) {
+
+    }
+
+    public void Add(Sculpture brush) {
+        
+        moveIntPtr(tgameObject, currentVersion);
+        moveTree(tgameObject, currentVersionTree);
+
+        moveIntPtr(brush.tgameObject, brush.currentVersion);
+        moveTree(brush.tgameObject, brush.currentVersionTree);
+
+        Debug.Log("Adding ");
+        IntPtr res = boolean_add(currentVersion, brush.currentVersion);
+        HashTreeNode tree_res = sg_export.add(currentVersionTree, brush.currentVersionTree, currentHashTree);
+
+        intPtrsToFree.Add(res);
+
+        moveIntPtrInverse(tgameObject, currentVersion);
+        moveTreeInverse(tgameObject, currentVersionTree); // might be optional
+
+        moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
+        moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
+
+        moveIntPtrInverse(tgameObject, res);
+        moveTreeInverse(tgameObject, tree_res);
+
+        updateGameObject(res, tree_res);
+        Debug.Log("Added ");
+    }
+
+    public void Sub(Sculpture brush) {
+        moveIntPtr(tgameObject, currentVersion);
+        moveTree(tgameObject, currentVersionTree);
+
+        moveIntPtr(brush.tgameObject, brush.currentVersion);
+        moveTree(brush.tgameObject, brush.currentVersionTree);
+
+        Debug.Log("Subtracting ");
+        IntPtr res = boolean_sub(currentVersion, brush.currentVersion);
+        HashTreeNode tree_res = sg_export.sub(currentVersionTree, brush.currentVersionTree, currentHashTree);
+
+        intPtrsToFree.Add(res);
+
+        moveIntPtrInverse(tgameObject, currentVersion);
+        moveTreeInverse(tgameObject, currentVersionTree); // might be optional
+
+        moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
+        moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
+
+
+        moveIntPtrInverse(tgameObject, res);
+        moveTreeInverse(tgameObject, tree_res);
+
+        updateGameObject(res, tree_res);
         Debug.Log("Subtracted ");
     }
 
@@ -257,6 +353,10 @@ public class Sculpture : ScriptableObject {
         if (obj != null ) {
             Renderer rend = obj.GetComponent<Renderer>();
             rend.enabled = false;
+
+            if(obj.GetComponent<sgObject>() != null) {
+                intPtrsToFree.Add(obj.GetComponent<sgObject>().GetHandle());
+            }
         }
         
     }
@@ -277,6 +377,7 @@ public class Sculpture : ScriptableObject {
                     for (int i = 0; i < chCnt && i < 1; i++)
                     {
                         IntPtr curCh = SolidGeometryLibIntegration.sg_group_child(subResGroup, i);
+                        intPtrsToFree.Add(curCh);
                         res = curCh;
                     }
                     SolidGeometryLibIntegration.sg_group_break(subResGroup);
@@ -303,6 +404,7 @@ public class Sculpture : ScriptableObject {
                     for (int i = 0; i < chCnt && i < 1; i++)
                     {
                         IntPtr curCh = SolidGeometryLibIntegration.sg_group_child(unionResGroup, i);
+                        intPtrsToFree.Add(curCh);
                         res = curCh;
                     }
                     SolidGeometryLibIntegration.sg_group_break(unionResGroup);
@@ -322,9 +424,6 @@ public class Sculpt : MonoBehaviour
     public GameObject leftGrabbedObject;
     public GameObject rightGrabbedObject;
 
-    public Sculpture sculpture;
-    public Sculpture brush;
-
     public OVRInput.Controller leftController;
     public OVRInput.Controller rightController;
 
@@ -332,6 +431,8 @@ public class Sculpt : MonoBehaviour
     public float rightRotationAmplification;
     public float distMultiplier = 2.0f;
 
+    private Sculpture sculpture;
+    private Sculpture brush;
 
     // list of all game objects created
     private List<GameObject> gameObjects = new List<GameObject>();
@@ -339,8 +440,6 @@ public class Sculpt : MonoBehaviour
     private sg_reconstruction reconstruction = new sg_reconstruction();
 
     private bool isGrabbing = false;
-    private bool isHoldingLeft = false;
-    private bool isHoldingRight = false;
 
     private float timeSinceLastSculpt = 0.0f;
     private float timeSinceLastScale = 0.0f;
@@ -394,23 +493,99 @@ public class Sculpt : MonoBehaviour
         sculpture.init();
         sculpture.tgameObject.name = "sculpture";
 
-        sculpture.tgameObject.transform.position = new Vector3(0.0f, 0, 3.0f);
+        sculpture.setTransforms(leftGrabbedObject.transform.position, leftGrabbedObject.transform.rotation);
 
         brush = new Sculpture();
         brush.init();
         brush.tgameObject.name = "brush";
 
-        brush.tgameObject.transform.position = new Vector3(0.0f, 0, 3.0f);
+        brush.setTransforms(rightGrabbedObject.transform.position, rightGrabbedObject.transform.rotation);
 
-        // rotate brush along the forward axis that's facing forward by 25 degrees
-        brush.tgameObject.transform.Rotate(0.0f, 0.0f, 25.0f, Space.Self);
         sculpture.Sub(brush);
 
+        
     }
-/*
+
+    void CleanDestroy(List<GameObject> gameObjectstoFree, List<IntPtr> intPtrsToFree) {
+        Debug.Log("CleanDestroy");
+        Debug.Log("gameObjectstoFree.Count: " + gameObjectstoFree.Count.ToString());
+        Debug.Log("intPtrsToFree.Count: " + intPtrsToFree.Count.ToString());
+
+        var alreadyFreedGameObjects = new HashSet<GameObject>();
+        var alreadyFreed = new HashSet<IntPtr>();
+
+        int destroyedGameObjectsCount = 0;
+        
+        for(int i = gameObjectstoFree.Count - 1; i >= 0; i--) {
+            
+            if(gameObjectstoFree[i] == null) {
+                continue;
+            }
+            if(alreadyFreedGameObjects.Contains(gameObjectstoFree[i])) {
+                continue;
+            }
+
+            if(gameObjectstoFree[i].GetComponent<sgObject>() != null) {
+                IntPtr ptr = gameObjectstoFree[i].GetComponent<sgObject>().GetHandle();
+                alreadyFreed.Add(ptr);
+            }
+            DestroyImmediate(gameObjectstoFree[i]);
+            destroyedGameObjectsCount++;
+            alreadyFreedGameObjects.Add(gameObjectstoFree[i]);
+            
+        }
+        Debug.Log("destroyedGameObjectsCount: " + destroyedGameObjectsCount.ToString());
+        // keep track of already freed pointers to avoid double free
+        
+
+        int destroyedIntPtrsCount = 0;
+        for(int i = intPtrsToFree.Count - 1; i >= 0; i--) {
+            if(intPtrsToFree[i] == IntPtr.Zero) {
+                continue;
+            }
+            if(alreadyFreed.Contains(intPtrsToFree[i])) {
+                continue;
+            }
+            SolidGeometryLibIntegration.sg_object_free(intPtrsToFree[i]);
+            destroyedIntPtrsCount++;
+            alreadyFreed.Add(intPtrsToFree[i]);
+        }
+
+        Debug.Log("destroyedIntPtrsCount: " + destroyedIntPtrsCount.ToString());
+
+        intPtrsToFree.Clear();
+        gameObjectstoFree.Clear();
+    }
+
+    void OnDestroy() {
+        Debug.Log("OnDestroy");
+        
+
+        var sculptureGameObjectsToFree = sculpture.gameObjectstoFree;
+        var sculptureIntPtrsToFree = sculpture.intPtrsToFree;
+
+        var brushGameObjectsToFree = brush.gameObjectstoFree;
+        var brushIntPtrsToFree = brush.intPtrsToFree;
 
 
-    void handleHand(OVRInput.Controller controller, GameObject grabbedObject, bool isLeft)
+        // concatenate the lists
+        var allGameObjectsToFree = sculptureGameObjectsToFree;
+        allGameObjectsToFree.AddRange(brushGameObjectsToFree);
+
+        var allIntPtrsToFree = sculptureIntPtrsToFree;
+        allIntPtrsToFree.AddRange(brushIntPtrsToFree);
+
+        CleanDestroy(allGameObjectsToFree, allIntPtrsToFree);
+
+
+        if(sgStarted && !sgStopped) {
+            Debug.Log("sgstop OnDestroy");
+            SolidGeometryLibIntegration.sg_core_stop();
+            sgStopped = true;
+        }
+    }
+
+    void handleHand(OVRInput.Controller controller, Sculpture grabbedObject, bool isLeft)
     {
         if(isLeft && OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger) < 0.1f) {
             lastLeftPalmPosition = OVRInput.GetLocalControllerPosition(controller);
@@ -418,13 +593,15 @@ public class Sculpt : MonoBehaviour
             return;
         }
         if(isLeft && OVRInput.Get(OVRInput.Axis1D.PrimaryHandTrigger) >= 0.1f) {
-            grabbedObject.transform.position = lastLeftHandPosition + distMultiplier * ( OVRInput.GetLocalControllerPosition(controller) - lastLeftPalmPosition);
+            var position = lastLeftHandPosition + distMultiplier * ( OVRInput.GetLocalControllerPosition(controller) - lastLeftPalmPosition);
 
             Quaternion changeInRotation = OVRInput.GetLocalControllerRotation(controller) * Quaternion.Inverse(lastLeftHandRotation);
-            grabbedObject.transform.rotation = changeInRotation * grabbedObject.transform.rotation;
+            var rotation = changeInRotation * grabbedObject.tgameObject.transform.rotation;
+
+            grabbedObject.setTransforms(position, rotation);
 
             lastLeftPalmPosition = OVRInput.GetLocalControllerPosition(controller);
-            lastLeftHandPosition = grabbedObject.transform.position;
+            lastLeftHandPosition = position;
             lastLeftHandRotation = OVRInput.GetLocalControllerRotation(controller);
         }
 
@@ -435,32 +612,29 @@ public class Sculpt : MonoBehaviour
         }
         if(!isLeft &&  OVRInput.Get(OVRInput.Axis1D.SecondaryHandTrigger) >= 0.1f) {
             Debug.Log("Grabbing with right hand");
-            grabbedObject.transform.position = lastRightHandPosition + distMultiplier * ( OVRInput.GetLocalControllerPosition(controller) - lastRightPalmPosition);
+            var position  = lastRightHandPosition + distMultiplier * ( OVRInput.GetLocalControllerPosition(controller) - lastRightPalmPosition);
 
             Quaternion changeInRotation = OVRInput.GetLocalControllerRotation(controller) * Quaternion.Inverse(lastRightHandRotation);
-            grabbedObject.transform.rotation = changeInRotation * grabbedObject.transform.rotation;
+            var rotation = changeInRotation * grabbedObject.tgameObject.transform.rotation;
+
+            grabbedObject.setTransforms(position, rotation);
 
             lastRightPalmPosition = OVRInput.GetLocalControllerPosition(controller);
-            lastRightHandPosition = grabbedObject.transform.position;
+            lastRightHandPosition = position;
             lastRightHandRotation = OVRInput.GetLocalControllerRotation(controller);
         }
     }
 
 
-    void handlePinch(GameObject grabbedObject)
+    void handleSculpt()
     {
         timeSinceLastSculpt += Time.deltaTime;
 
         if  (OVRInput.Get(OVRInput.Axis1D.SecondaryIndexTrigger) >= 0.1f && !isGrabbing && timeSinceLastSculpt > 0.5f)
         {
             isGrabbing = true;
-            // indicate of operation + random number
-            Debug.Log("Grabbing, perform sculpting " + UnityEngine.Random.Range(0, 1000).ToString());
-            //debugPosition(rightGrabbedObject);
-            //test();
-            debugPositionWithLeft(rightGrabbedObject);
-            //testAllocationDealloation();
-            //testIntPtrResultShared();
+            Debug.Log("Perform sculpting " + UnityEngine.Random.Range(0, 1000).ToString());
+            performSculpt();
             timeSinceLastSculpt = 0.0f;
         }
         else if (OVRInput.Get(OVRInput.Axis1D.SecondaryIndexTrigger) < 0.1f && isGrabbing)
@@ -469,9 +643,96 @@ public class Sculpt : MonoBehaviour
         }
     }
 
+    void performSculpt() {
+        if(isAddMode) {
+            sculpture.Add(brush);
+        } else {
+            sculpture.Sub(brush);
+        }
+    }
+
+
+
+
     
+    void Update() {
+        handleHand(leftController, sculpture, true);
+        handleHand(rightController, brush, false);
+        handleSculpt();
 
 
+        if(Input.GetKeyDown(KeyCode.S)) {
+            string path = EditorUtility.SaveFilePanel("Save file as", "Assets/tools", "MyCoolSculptingTool", "txt");
+            Debug.Log("Selected file: " + path);
+            sg_export.writeToFile(sculpture.currentVersionTree, sculpture.currentHashTree, path);
+        }
+
+        if(OVRInput.GetDown(OVRInput.Button.One)) {
+            sculpture.Undo();
+        }
+
+        if(OVRInput.GetDown(OVRInput.Button.Two)) {
+            sculpture.Redo();
+        }
+
+        if(OVRInput.GetDown(OVRInput.Button.Three)) {
+            // create a file called YYYY_MM_DD_HH_MM_SS.txt
+            string path = @"C:\Users\edegu\sculptures\" + DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".txt";
+
+            sg_export.writeToFile(sculpture.currentVersionTree, sculpture.currentHashTree, path);
+            obj_exporter.MeshToFile(sculpture.tgameObject.GetComponent<MeshFilter>() , "Assets", "obj_export_" +  DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".obj");
+
+        }
+
+        if(OVRInput.GetDown(OVRInput.Button.Start)) {
+            isAddMode = !isAddMode;
+        }
+
+        if(OVRInput.GetDown(OVRInput.Button.Four)) {
+            toolIndex = (toolIndex + 1) % defaultToolsPaths.Count;
+            Debug.Log("Tool index: " + toolIndex);
+            //brush.load(defaultToolsPaths[toolIndex]);
+        }
+
+        if(Input.GetKeyDown(KeyCode.R)) {
+            string path = EditorUtility.OpenFilePanel("Open file", "Assets/tools", "txt");
+            Debug.Log("Selected file: " + path);
+            brush.load(path);
+        }
+
+        if(Input.GetKeyDown(KeyCode.L)) {
+            string path = EditorUtility.OpenFilePanel("Open file", "Assets/tools", "txt");
+            Debug.Log("Selected file: " + path);
+            sculpture.load(path);
+        }
+
+
+        // if right joystick up, scale up the brush
+        timeSinceLastScale += Time.deltaTime;
+        if(OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick).y > 0.5f && brush != null && timeSinceLastScale > 0.1f) {
+            brush.Scale(1.05f);
+            timeSinceLastScale = 0.0f;
+        }
+
+        if(OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick).y > 0.5f && brush != null && timeSinceLastScale > 0.1f) {
+            brush.Scale(0.95f);
+            timeSinceLastScale = 0.0f;
+        }
+
+        if(OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick).y > 0.5f && sculpture != null && timeSinceLastScale > 0.1f) {
+            sculpture.Scale(1.05f);
+            timeSinceLastScale = 0.0f;
+        }
+
+        if(OVRInput.Get(OVRInput.Axis2D.PrimaryThumbstick).y < -0.5f && sculpture != null && timeSinceLastScale > 0.1f) {
+            sculpture.Scale(.95f);
+            timeSinceLastScale = 0.0f;
+        }
+
+    }
+
+
+    /*
     IntPtr GetExistingIntPtrObject(GameObject brush) {
         IntPtr brushCube = brush.GetComponent<sgObject>().GetHandle();
 
@@ -1007,10 +1268,6 @@ public class Sculpt : MonoBehaviour
 
     
     */
-
-    void Update() {
-
-    }
 
     /*
 

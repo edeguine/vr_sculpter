@@ -62,8 +62,6 @@ public class GrabAndRotate : MonoBehaviour
 
     private bool isAddMode = false;
 
-    private bool brushIsSmallCube = true;
-
     private int toolIndex = 0;
     private string pointePath = @"C:\Users\edegu\vr_sculpter\Assets\tools\pointe.txt";
     private string testPath = @"C:\Users\edegu\vr_sculpter\Assets\tools\simple_two_cubes.txt";
