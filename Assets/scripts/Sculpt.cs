@@ -45,6 +45,9 @@ public class Sculpture : ScriptableObject {
 
         previousVersion = new List<IntPtr>();
         previousVersionTree = new List<HashTreeNode>();
+
+        nextVersion = new Stack<IntPtr>();
+        nextVersionTree = new Stack<HashTreeNode>();
         
 
         // history
@@ -177,15 +180,24 @@ public class Sculpture : ScriptableObject {
     }
 
     Vector3 getNewPosition(GameObject brush) {
-        return new Vector3(brush.transform.position.x - brush.transform.localScale.x / 2.0f,
-            brush.transform.position.y - brush.transform.localScale.y / 2.0f,
-            brush.transform.position.z - brush.transform.localScale.z / 2.0f);
+        return new Vector3(brush.transform.position.x,
+            brush.transform.position.y,
+            brush.transform.position.z);
+    }
+
+    Vector3 getRotationCenter(GameObject brush) {
+        return new Vector3(0.0f, 0.0f, 0.0f);
+    }
+
+    Vector3 getNewPositionAccountOffset(GameObject brush) {
+        return new Vector3(brush.transform.position.x + brush.transform.localScale.x / 2.0f,
+            brush.transform.position.y + brush.transform.localScale.y / 2.0f,
+            brush.transform.position.z + brush.transform.localScale.z / 2.0f);
     }
 
     Vector3 getRotationAxis(GameObject brush) {
         Quaternion rotationBrush = brush.transform.rotation;
         rotationBrush.ToAngleAxis(out float angleDegBrush, out Vector3 axisBrush);
-        float angleRadBrush = angleDegBrush * Mathf.Deg2Rad;
         return axisBrush;
     }
 
@@ -202,20 +214,40 @@ public class Sculpture : ScriptableObject {
         Vector3 rotationAxis = getRotationAxis(original);
         float rotationAngleRad = getRotationAngleRad(original);
         Vector3 newPosition = getNewPosition(original);
+        Vector3 rotationCenter = getRotationCenter(original);
 
         SolidGeometryLibIntegration.sg_object_rotate(ptr,
-            original.transform.position.x, original.transform.position.y, original.transform.position.z,
+            rotationCenter.x, rotationCenter.y, rotationCenter.z,
             rotationAxis.x, rotationAxis.y, rotationAxis.z, rotationAngleRad);
 
         SolidGeometryLibIntegration.sg_object_move(ptr, 
-            newPosition.x + original.transform.localScale.x / 2.0f, 
-            newPosition.y + original.transform.localScale.y / 2.0f,
-            newPosition.z + original.transform.localScale.z / 2.0f);
+            newPosition.x,
+            newPosition.y,
+            newPosition.z);
         return ptr;
     }
 
     
     private IntPtr moveIntPtrInverse(GameObject original, IntPtr ptr) {
+        // warning this will move the stuff
+        Vector3 rotationAxis = getRotationAxis(original);
+        float rotationAngleRad = getRotationAngleRad(original);
+        Vector3 newPosition = getNewPosition(original);
+        Vector3 rotationCenter = getRotationCenter(original);
+
+        SolidGeometryLibIntegration.sg_object_move(ptr, 
+            -newPosition.x,
+            -newPosition.y,
+            -newPosition.z);
+
+        SolidGeometryLibIntegration.sg_object_rotate(ptr,
+            rotationCenter.x, rotationCenter.y, rotationCenter.z,
+            rotationAxis.x, rotationAxis.y, rotationAxis.z, -rotationAngleRad);
+        
+        return ptr;
+    }
+
+    private IntPtr moveIntPtrInverseNoOffset(GameObject original, IntPtr ptr) {
         // warning this will move the stuff
         Vector3 rotationAxis = getRotationAxis(original);
         float rotationAngleRad = getRotationAngleRad(original);
@@ -226,7 +258,7 @@ public class Sculpture : ScriptableObject {
             rotationAxis.x, rotationAxis.y, rotationAxis.z, -rotationAngleRad);
 
         SolidGeometryLibIntegration.sg_object_move(ptr, 
-            -newPosition.x - original.transform.localScale.x / 2.0f, 
+            -newPosition.x - original.transform.localScale.x / 2.0f,
             -newPosition.y - original.transform.localScale.y / 2.0f,
             -newPosition.z - original.transform.localScale.z / 2.0f);
         
@@ -275,18 +307,22 @@ public class Sculpture : ScriptableObject {
         intPtrsToFree.Add(res);
 
         GameObject resGO = new GameObject();
+        resGO.transform.position = tgameObject.transform.position;
+        resGO.transform.rotation = tgameObject.transform.rotation;
         sgObject resSgObj = resGO.AddComponent<sgObject>();
         resSgObj.InitObject(res);
 
-        resGO.transform.position = tgameObject.transform.position;
-        resGO.transform.rotation = tgameObject.transform.rotation;
 
-        tgameObject.name = "oldScultpure";
+        var original_name = tgameObject.name;
+        tgameObject.name = original_name + "_old";
+
+        Debug.Log("Old coordinates: " + tgameObject.transform.position.ToString() + " " + tgameObject.transform.rotation.ToString());
         HideGameObject(tgameObject);
         gameObjectstoFree.Add(tgameObject);
 
         tgameObject = resGO;
-        tgameObject.name = "sculpture";
+        tgameObject.name = original_name + "_new";
+        Debug.Log("New coordinates: " + tgameObject.transform.position.ToString() + " " + tgameObject.transform.rotation.ToString());
         gameObjectstoFree.Add(tgameObject);
     }
 
@@ -314,19 +350,24 @@ public class Sculpture : ScriptableObject {
         moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
         moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
 
-        moveIntPtrInverse(tgameObject, res);
-        moveTreeInverse(tgameObject, tree_res);
+        if(res != IntPtr.Zero) {
+            moveIntPtrInverse(tgameObject, res);
+            moveTreeInverse(tgameObject, tree_res);
 
-        updateGameObject(res, tree_res);
-        Debug.Log("Added ");
+            updateGameObject(res, tree_res);
+            Debug.Log("Added ");
+        } else {
+            Debug.Log("Addition empty");
+        }
     }
 
     public void Sub(Sculpture brush) {
+        
         moveIntPtr(tgameObject, currentVersion);
         moveTree(tgameObject, currentVersionTree);
 
         moveIntPtr(brush.tgameObject, brush.currentVersion);
-        moveTree(brush.tgameObject, brush.currentVersionTree);
+        moveTree(brush.tgameObject, brush.currentVersionTree); 
 
         Debug.Log("Subtracting ");
         IntPtr res = boolean_sub(currentVersion, brush.currentVersion);
@@ -338,14 +379,38 @@ public class Sculpture : ScriptableObject {
         moveTreeInverse(tgameObject, currentVersionTree); // might be optional
 
         moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
-        moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
+        moveTreeInverse(brush.tgameObject, brush.currentVersionTree); 
 
+        if(res != IntPtr.Zero) {
+            moveIntPtrInverse(tgameObject, res);
+            moveTreeInverse(tgameObject, tree_res);
 
-        moveIntPtrInverse(tgameObject, res);
-        moveTreeInverse(tgameObject, tree_res);
+            updateGameObject(res, tree_res);
+            Debug.Log("Subtracted ");
+        } else {
+            Debug.Log("Subtraction empty");
+        }
+        
+    }
 
-        updateGameObject(res, tree_res);
-        Debug.Log("Subtracted ");
+    public void test(Sculpture brush) {
+
+        moveIntPtr(tgameObject, currentVersion);
+        moveIntPtr(brush.tgameObject, brush.currentVersion);
+
+        updateGameObject(currentVersion, currentVersionTree);
+        brush.updateGameObject(brush.currentVersion, brush.currentVersionTree);
+
+    }
+
+    public void testRotation() {
+        moveIntPtr(tgameObject, currentVersion);
+        moveTree(tgameObject, currentVersionTree);
+
+        moveIntPtrInverse(tgameObject, currentVersion);
+        moveTreeInverse(tgameObject, currentVersionTree);
+
+        updateGameObject(currentVersion, currentVersionTree);
     }
 
     void HideGameObject(GameObject obj) {
@@ -421,8 +486,6 @@ public class Sculpture : ScriptableObject {
 
 public class Sculpt : MonoBehaviour
 {
-    public GameObject leftGrabbedObject;
-    public GameObject rightGrabbedObject;
 
     public OVRInput.Controller leftController;
     public OVRInput.Controller rightController;
@@ -464,6 +527,20 @@ public class Sculpt : MonoBehaviour
 
     private List<String> defaultToolsPaths = new List<String>();
 
+    void rotationTest() {
+
+        IntPtr box = SolidGeometryLibIntegration.sg_object_box(1.0f, 1.0f, 1.0f);
+        SolidGeometryLibIntegration.sg_object_move(box, -0.5f, -0.5f, -0.5f);
+
+        SolidGeometryLibIntegration.sg_object_rotate(box, 0, 0, 0, 0f, 0.0f, 1.0f, Mathf.PI / 4.0f);
+
+        GameObject display = new GameObject("display");
+        sgObject sgObj = display.AddComponent<sgObject>();
+        sgObj.InitObject(box);
+
+    }
+
+
     void Start()
     {
         defaultToolsPaths.Add(pointePath);
@@ -488,22 +565,29 @@ public class Sculpt : MonoBehaviour
 
         //LoadBrush(defaultToolsPaths[toolIndex]);
         //debugPositionWithLeft(rightGrabbedObject);
+        
 
         sculpture = new Sculpture();
         sculpture.init();
         sculpture.tgameObject.name = "sculpture";
 
-        sculpture.setTransforms(leftGrabbedObject.transform.position, leftGrabbedObject.transform.rotation);
+        Quaternion trotation = Quaternion.Euler(55, 12, 45);
+
+        
+
+        sculpture.setTransforms(new Vector3(0, 2, 3), trotation);
+        sculpture.testRotation();
 
         brush = new Sculpture();
         brush.init();
         brush.tgameObject.name = "brush";
 
-        brush.setTransforms(rightGrabbedObject.transform.position, rightGrabbedObject.transform.rotation);
+        // get a 25 degrees rotation along z as a quaternion using euler angles
+        Quaternion rotation = Quaternion.Euler(0, 0, 10);
 
-        sculpture.Sub(brush);
+        brush.setTransforms(new Vector3(0, 2, 3), rotation);
 
-        
+        //sculpture.test(brush);
     }
 
     void CleanDestroy(List<GameObject> gameObjectstoFree, List<IntPtr> intPtrsToFree) {
@@ -569,11 +653,12 @@ public class Sculpt : MonoBehaviour
 
 
         // concatenate the lists
-        var allGameObjectsToFree = sculptureGameObjectsToFree;
-        allGameObjectsToFree.AddRange(brushGameObjectsToFree);
+        // we need to destroy the sculpture first so we put them at the end, to avoid memory issues (a and b needs to be destroyed before a or b)
+        var allGameObjectsToFree = brushGameObjectsToFree;
+        allGameObjectsToFree.AddRange(sculptureGameObjectsToFree);
 
-        var allIntPtrsToFree = sculptureIntPtrsToFree;
-        allIntPtrsToFree.AddRange(brushIntPtrsToFree);
+        var allIntPtrsToFree = brushIntPtrsToFree;
+        allIntPtrsToFree.AddRange(sculptureIntPtrsToFree);
 
         CleanDestroy(allGameObjectsToFree, allIntPtrsToFree);
 
@@ -651,14 +736,24 @@ public class Sculpt : MonoBehaviour
         }
     }
 
+    /*
+    void moveGrabbedObjects() {
+        leftGrabbedObject.transform.position = sculpture.tgameObject.transform.position;
+        leftGrabbedObject.transform.rotation = sculpture.tgameObject.transform.rotation;
 
-
+        rightGrabbedObject.transform.position = brush.tgameObject.transform.position;
+        rightGrabbedObject.transform.rotation = brush.tgameObject.transform.rotation;
+    }*/
 
     
     void Update() {
+        
         handleHand(leftController, sculpture, true);
         handleHand(rightController, brush, false);
+        //moveGrabbedObjects();
+
         handleSculpt();
+        
 
 
         if(Input.GetKeyDown(KeyCode.S)) {
