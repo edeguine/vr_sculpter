@@ -74,6 +74,7 @@ public class Sculpture : ScriptableObject {
 
     public void Undo() {
         if(previousVersion.Count > 0 && previousVersionTree.Count > 0) {
+            Debug.Log("Previous version count: " + previousVersion.Count.ToString() + " " + previousVersionTree.Count.ToString() + " " + nextVersion.Count.ToString() + " " + nextVersionTree.Count.ToString());
             int index = previousVersion.Count - 1;
             IntPtr ptr = previousVersion[index];
             HashTreeNode tree = previousVersionTree[index];
@@ -91,7 +92,7 @@ public class Sculpture : ScriptableObject {
             previousVersion.RemoveAt(index);
             previousVersionTree.RemoveAt(index);
 
-            updateGameObject(ptr, tree);
+            updateGameObject(ptr, tree, false);
             Debug.Log("Undid");
         } else {
             Debug.Log("Nothing to undo");
@@ -112,7 +113,7 @@ public class Sculpture : ScriptableObject {
             currentVersion = ptr;
             currentVersionTree = tree;
 
-            updateGameObject(ptr, tree);
+            updateGameObject(ptr, tree, false);
             Debug.Log("Redid");
         } else {
             Debug.Log("Nothing to redo");
@@ -291,12 +292,15 @@ public class Sculpture : ScriptableObject {
         return node;
     }
 
-    public void updateGameObject(IntPtr res, HashTreeNode tree_res) {
-        previousVersion.Add(currentVersion);
+    public void updateGameObject(IntPtr res, HashTreeNode tree_res, bool updateHistory) {
+
+        if(updateHistory) {
+            previousVersion.Add(currentVersion);
+            previousVersionTree.Add(currentVersionTree);
+        }
+
         intPtrsToFree.Add(currentVersion);
         currentVersion = res;
-
-        previousVersionTree.Add(currentVersionTree);
         currentVersionTree = tree_res;
         
         if(res == IntPtr.Zero) {
@@ -354,7 +358,7 @@ public class Sculpture : ScriptableObject {
             moveIntPtrInverse(tgameObject, res);
             moveTreeInverse(tgameObject, tree_res);
 
-            updateGameObject(res, tree_res);
+            updateGameObject(res, tree_res, true);
             Debug.Log("Added ");
         } else {
             Debug.Log("Addition empty");
@@ -385,7 +389,7 @@ public class Sculpture : ScriptableObject {
             moveIntPtrInverse(tgameObject, res);
             moveTreeInverse(tgameObject, tree_res);
 
-            updateGameObject(res, tree_res);
+            updateGameObject(res, tree_res, true);
             Debug.Log("Subtracted ");
         } else {
             Debug.Log("Subtraction empty");
@@ -398,8 +402,8 @@ public class Sculpture : ScriptableObject {
         moveIntPtr(tgameObject, currentVersion);
         moveIntPtr(brush.tgameObject, brush.currentVersion);
 
-        updateGameObject(currentVersion, currentVersionTree);
-        brush.updateGameObject(brush.currentVersion, brush.currentVersionTree);
+        updateGameObject(currentVersion, currentVersionTree, true);
+        brush.updateGameObject(brush.currentVersion, brush.currentVersionTree, true);
 
     }
 
@@ -410,7 +414,7 @@ public class Sculpture : ScriptableObject {
         moveIntPtrInverse(tgameObject, currentVersion);
         moveTreeInverse(tgameObject, currentVersionTree);
 
-        updateGameObject(currentVersion, currentVersionTree);
+        updateGameObject(currentVersion, currentVersionTree, true);
     }
 
     void HideGameObject(GameObject obj) {
