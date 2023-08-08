@@ -58,9 +58,6 @@ public class Sculpture : ScriptableObject {
 
         currentHashTree.addNodeNoRelatives(currentVersionTree);
         currentHashTree.setRoot(currentVersionTree);
-
-        previousVersion.Add(currentVersion);
-        previousVersionTree.Add(currentVersionTree);
     }
 
     public void setTransforms(Vector3 position, Quaternion rotation) {
@@ -107,8 +104,7 @@ public class Sculpture : ScriptableObject {
             intPtrsToFree.Add(ptr);
             intPtrsToFree.Add(currentVersion);
 
-            previousVersion.Add(currentVersion);
-            previousVersionTree.Add(currentVersionTree);
+            updateHistory();
 
             currentVersion = ptr;
             currentVersionTree = tree;
@@ -124,7 +120,10 @@ public class Sculpture : ScriptableObject {
     void Start() {}
 
     public void Scale(float factor) {
-        
+        SolidGeometryLibIntegration.sg_object_scale(currentVersion, factor, factor, factor);
+        HashTreeNode tree_res = sg_export.scale(currentVersionTree, currentHashTree, factor, factor, factor);
+
+        updateGameObject(currentVersion, tree_res, false);
     }
 
     public void CleanDestroy()
@@ -282,14 +281,20 @@ public class Sculpture : ScriptableObject {
         return node;
     }
 
-    public void updateGameObject(IntPtr res, HashTreeNode tree_res, bool updateHistory) {
+    private void updateHistory() {
+        previousVersion.Add(currentVersion);
+        previousVersionTree.Add(currentVersionTree);
+    }
 
-        if(updateHistory) {
-            previousVersion.Add(currentVersion);
-            previousVersionTree.Add(currentVersionTree);
+    public void updateGameObject(IntPtr res, HashTreeNode tree_res, bool tupdateHistory) {
+
+        if(tupdateHistory) {
+            updateHistory();
         }
 
         intPtrsToFree.Add(currentVersion);
+        intPtrsToFree.Add(res);
+
         currentVersion = res;
         currentVersionTree = tree_res;
         
@@ -297,8 +302,6 @@ public class Sculpture : ScriptableObject {
             Debug.Log("IntPtr is null");
             return;
         }
-
-        intPtrsToFree.Add(res);
 
         GameObject resGO = new GameObject();
         resGO.transform.position = tgameObject.transform.position;
@@ -348,35 +351,37 @@ public class Sculpture : ScriptableObject {
 
     public void Add(Sculpture brush) {
 
-        currentHashTree.IngestTreeDontSetRoot(brush.currentHashTree);
-        
+        // Add the nodes from brush to currentHashtree
         moveIntPtr(tgameObject, currentVersion);
-        moveTree(tgameObject, currentVersionTree);
+        currentVersionTree = moveTree(tgameObject, currentVersionTree);
 
         moveIntPtr(brush.tgameObject, brush.currentVersion);
-        moveTree(brush.tgameObject, brush.currentVersionTree);
+        brush.currentVersionTree = moveTree(brush.tgameObject, brush.currentVersionTree); 
 
-        Debug.Log("Adding ");
+        Debug.Log("Subtracting ");
         IntPtr res = boolean_add(currentVersion, brush.currentVersion);
         HashTreeNode tree_res = sg_export.add(currentVersionTree, brush.currentVersionTree, currentHashTree);
 
         intPtrsToFree.Add(res);
 
         moveIntPtrInverse(tgameObject, currentVersion);
-        moveTreeInverse(tgameObject, currentVersionTree); // might be optional
+        currentVersionTree = moveTreeInverse(tgameObject, currentVersionTree); // might be optional
 
         moveIntPtrInverse(brush.tgameObject, brush.currentVersion);
-        moveTreeInverse(brush.tgameObject, brush.currentVersionTree);
+        brush.currentVersionTree = moveTreeInverse(brush.tgameObject, brush.currentVersionTree); 
+
+        currentHashTree.IngestTreeDontSetRoot(brush.currentHashTree);
 
         if(res != IntPtr.Zero) {
             moveIntPtrInverse(tgameObject, res);
-            moveTreeInverse(tgameObject, tree_res);
+            tree_res = moveTreeInverse(tgameObject, tree_res);
 
             updateGameObject(res, tree_res, true);
             Debug.Log("Added ");
         } else {
             Debug.Log("Addition empty");
         }
+        
     }
 
     public void Sub(Sculpture brush) {
@@ -834,7 +839,7 @@ public class Sculpt : MonoBehaviour
             timeSinceLastScale = 0.0f;
         }
 
-        if(OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick).y > 0.5f && brush != null && timeSinceLastScale > 0.1f) {
+        if(OVRInput.Get(OVRInput.Axis2D.SecondaryThumbstick).y < -0.5f && brush != null && timeSinceLastScale > 0.1f) {
             brush.Scale(0.95f);
             timeSinceLastScale = 0.0f;
         }
