@@ -26,6 +26,8 @@ public class Sculpture : ScriptableObject {
 
     public HashTree currentHashTree;
 
+    public float currentScale = 1.0f;
+
     public void init() {
         // memory
         intPtrsToFree = new List<IntPtr>();
@@ -120,10 +122,16 @@ public class Sculpture : ScriptableObject {
     void Start() {}
 
     public void Scale(float factor) {
+        currentScale *= factor;
         SolidGeometryLibIntegration.sg_object_scale(currentVersion, factor, factor, factor);
         HashTreeNode tree_res = sg_export.scale(currentVersionTree, currentHashTree, factor, factor, factor);
 
         updateGameObject(currentVersion, tree_res, false);
+    }
+
+    public void ScaleToAbsoluteScale(float desiredScale) {
+        float factor = desiredScale / currentScale;
+        Scale(factor);
     }
 
     public void CleanDestroy()
@@ -780,6 +788,7 @@ public class Sculpt : MonoBehaviour
         
         handleHand(leftController, sculpture, true);
         handleHand(rightController, brush, false);
+        intuitiveScaling();
         //moveGrabbedObjects();
 
         handleSculpt();
@@ -854,6 +863,29 @@ public class Sculpt : MonoBehaviour
             timeSinceLastScale = 0.0f;
         }
 
+    }
+
+
+    private float refScalingDistance = 1.0f;
+    private float timeSinceLastIntuitiveScaling = 0.0f;
+    private float INTUITIVE_SCALING_TIME_THRESHOLD = 0.1f;
+
+    void intuitiveScaling() {
+        timeSinceLastIntuitiveScaling += Time.deltaTime;
+        if (OVRInput.Get(OVRInput.Axis1D.PrimaryIndexTrigger) > 0.5f && OVRInput.Get(OVRInput.Axis1D.SecondaryHandTrigger) >= 0.1f)
+        {
+            float currentDistance = Vector3.Distance(sculpture.tgameObject.transform.position, brush.tgameObject.transform.position);
+            // Only update the scale if enough time has passed since the last update.
+            if (timeSinceLastIntuitiveScaling > INTUITIVE_SCALING_TIME_THRESHOLD)
+            {   
+                    float desiredScale = currentDistance / refScalingDistance;
+                    Debug.Log("Scaling desiredScale: " + desiredScale.ToString());
+                    sculpture.ScaleToAbsoluteScale(desiredScale); // Call your scale method here
+                    
+                    // Reset the time since the last scale operation.
+                    timeSinceLastIntuitiveScaling = 0.0f;
+            }
+        }
     }
 
 
